@@ -5,3 +5,5 @@ df
 sd
 fs
 fdsf
+
+https://emails.azure.microsoft.com/redirect/?destination=https%3A%2F%2Fmy.visualstudio.com%2F%3Fwt.mc_id%3Dvisual-studio-subscriber-assignment_eml&p=bT1jYzE2ZjUzZi0xYTFjLTQyNWUtYmFlZS1hNDJjYTM3YzY1YTAmdT1hZW8mbD1teS52aXN1YWxzdHVkaW8uY29tXzI%3D
