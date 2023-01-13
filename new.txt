@@ -15,3 +15,25 @@ https://tudip.com/blog-post/how-to-securely-transfer-web-api-data-in-asp-net-cor
 https://www.scottbrady91.com/c-sharp/json-web-encryption-jwe-in-dotnet-core
 
 https://linuxhint.com/protect-encrypt-javascript-code/
+
+
+python
+https://github.com/sogno-platform/cimpy
+https://github.com/bressanmarcos/cimrdf.py
+
+java
+https://github.com/griddigit/CimPal-CGMES-Converter
+https://github.com/griddigit/CimPal
+
+js
+https://github.com/derrickoswald/CIMSpace
+
+scale
+https://github.com/derrickoswald/CIMSpark
+
+py->c#
+https://pythoncsharp.com/
+https://github.com/uxmal/pytocs
+
+ies
+https://drive.google.com/drive/folders/1lQ9I3Zd3LnQF3dABiAMXGbXTFR2Wl1p6
