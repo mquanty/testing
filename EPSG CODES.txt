@@ -1,0 +1,36 @@
+
+
+Source WKT (EPSG:27700 - British National Grid):
+"PROJCS[\"OSGB 1936 / British National Grid\",GEOGCS[\"OSGB 1936\",DATUM[\"OSGB_1936\",SPHEROID[\"Airy 1830\",6377563.396,299.3249646,AUTHORITY[\"EPSG\",\"7001\"]],TOWGS84[375,-111,431,0,0,0,0],AUTHORITY[\"EPSG\",\"6277\"]],PRIMEM[\"Greenwich\",0.0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.017453292519943295],AXIS[\"Geodetic latitude\",NORTH],AXIS[\"Geodetic longitude\",EAST],AUTHORITY[\"EPSG\",\"4277\"]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"latitude_of_origin\",49.0],PARAMETER[\"central_meridian\",-2.0],PARAMETER[\"scale_factor\",0.9996012717],PARAMETER[\"false_easting\",400000.0],PARAMETER[\"false_northing\",-100000.0],UNIT[\"metre\",1.0],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH],AUTHORITY[\"EPSG\",\"27700\"]]"
+Target WKT (EPSG:4326 - WGS84):
+"GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0.0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.017453292519943295],AXIS[\"Geodetic latitude\",NORTH],AXIS[\"Geodetic longitude\",EAST],AUTHORITY[\"EPSG\",\"4326\"]]"
+
+
+using ProjNet.CoordinateSystems;
+using ProjNet.CoordinateSystems.Transformations;
+using ProjNet.CoordinateSystems.Projections;
+using ProjNet.CoordinateSystems.Registry;
+
+public string ConvertEpsgToWkt(int epsgCode)
+{
+    CoordinateSystemFactory csFactory = new CoordinateSystemFactory();
+    CoordinateSystemRegistry csRegistry = new CoordinateSystemRegistry();
+    ICoordinateSystem coordinateSystem = csRegistry.CreateFromEpsgCode(epsgCode);
+    string wktString = coordinateSystem.ToWKT();
+    return wktString;
+}
+
+int epsgCode = 4326;
+string wktString = ConvertEpsgToWkt(epsgCode);
+Console.WriteLine(wktString);
+Replace epsgCode with the specific EPSG code you want to convert. The resulting WKT string will be printed on the console or can be used as needed.
+
+
+("EPSG::28992", "Amersfoort / RD New", "Large and medium scale topographic mapping and engineering survey.",
+("EPSG::23700", "HD72 / EOV", "Large and medium scale topographic mapping and engineering survey.",
+("EPSG::32040", "NAD27 / Texas South Central", "Large and medium scale topographic mapping and engineering survey.",
+("EPSG::26930", "NAD83 / Alabama West", "Large and medium scale topographic mapping and engineering survey.",
+("EPSG::27700", "OSGB36 / British National Grid", "Large and medium scale topographic mapping and engineering survey.",
+("EPSG::3395", "WGS84 / World Mercator", "Euro-centric view of world excluding polar areas.", "Very small scale mapping.",
+("EPSG::5041", "WGS84 / UPS North (E,N)", "Military mapping by NATO.",
+("EPSG::5042", "WGS84 / UPS South (E,N)", "Military mapping by NATO.",
