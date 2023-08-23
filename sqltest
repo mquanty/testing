@@ -1,0 +1,53 @@
+select distinct DERTYPE FROM (
+SELECT 
+	T2.Name AS DTR, 
+	T1.Name AS DER, 
+	CASE 
+		WHEN T1.MarkerId = 6 THEN 'LD'
+		WHEN T1.MarkerId = 17 THEN 'PV'
+		WHEN T1.MarkerId = 18 THEN 'EV'
+		WHEN T1.MarkerId = 20 THEN 'ES'
+		ELSE (SELECT ObjectType from WS_GEO_Marker where Id = T1.MarkerId)
+	END AS DERTYPE
+FROM
+	(SELECT MarkerId, ParentId, Name FROM [base_dm_operational].[dbo].[WS_GEO_DataPoint] where ParentId in 
+		(SELECT Id FROM [base_dm_operational].[dbo].[WS_GEO_DataPoint] where Name In 
+			(SELECT TransformerName FROM [base_dm_operational].[dbo].[DPF_Transformer] where OptionID = 407) --('1840318406', '1840316400', '1840313370')
+		) and StatusId = 1 --and MarkerId IN (6,17,18,20)
+	) T1 
+LEFT JOIN
+	(SELECT Id, Name FROM [base_dm_operational].[dbo].[WS_GEO_DataPoint] where Name In 
+		(SELECT TransformerName FROM [base_dm_operational].[dbo].[DPF_Transformer] where OptionID = 407) --('1840318406', '1840316400', '1840313370')
+	) T2
+on T1.ParentId = T2.Id
+--order by DERTYPE
+) DD
+
+
+SELECT * FROM [base_dm_operational].[dbo].[DPF_Transformer] where OptionID = 407
+
+
+select Interval, Sum(ISNULL(ActivePower,0)) as p, Sum(ISNULL(ReactivePower,0)) AS q, Avg(ISNULL(P_Z,0)) AS p_z, Avg(ISNULL(P_I,0)) as p_i, Avg(ISNULL(P_P,0)) as p_p, Avg(ISNULL(Q_Z,0)) as q_z, Avg(ISNULL(Q_I,0)) as q_i, Avg(ISNULL(Q_P,0)) as q_p
+from dpf_profiledata 
+where ProfileDetailID in (14, 15, 16, 17) 
+group by Interval;
+
+
+select X.TransformerName, Child.Name, M.ObjectType from DPF_Transformer X with (nolock)
+INNER JOIN
+WS_GEO_DataPoint Parent with (nolock)
+ON
+X.TransformerName = Parent.Name --AND Parent.MarkerId = 14
+INNER JOIN
+WS_GEO_Marker P with (nolock)
+ON
+P.Id = Parent.MarkerId AND P.ObjectType = 'Transformer'
+LEFT JOIN
+WS_GEO_DataPoint Child with (nolock) 
+ON
+Child.ParentId = Parent.Id --AND Child.MarkerId in (6, 17, 18, 20)
+INNER JOIN
+WS_GEO_Marker M with (nolock)
+ON
+M.Id = Child.MarkerId AND M.ObjectType IN ('Meter', 'Solar', 'EV', 'Battery')
+WHERE X.OptionID = 407
