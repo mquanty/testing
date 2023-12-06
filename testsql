@@ -37,6 +37,13 @@ public async Task<List<YourResultType>> GetProfileDataAsync(List<int> profileDet
 }
 
 
+SELECT T.TransformerName as DTR, Child.Name, Child.FullName, M.ObjectType as DERTYPE 
+FROM DPF_Transformer T with (nolock) 
+INNER JOIN WS_GEO_DataPoint Parent with (nolock) ON T.TransformerName = Parent.Name 
+INNER JOIN WS_GEO_Marker P with (nolock) ON P.Id = Parent.MarkerId AND P.ObjectType = 'Transformer' 
+LEFT JOIN WS_GEO_DataPoint Child with (nolock) ON Child.ParentId = Parent.Id
+INNER JOIN WS_GEO_Marker M with (nolock) ON M.Id = Child.MarkerId AND M.ObjectType IN ('Meter', 'Solar', 'EV', 'Battery', 'Microgrid', 'Backup Generator') 
+WHERE T.OptionID = 432;
 
 
 
