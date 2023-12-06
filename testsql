@@ -72,3 +72,13 @@ public async Task<List<object>> GetTransformerDetailsAsync(int optionId)
     }
 }
 
+
+
+            List<DpfOnlineSecondaryLoad> rowsLoad = _context.DpfOnlineSecondaryLoad.AsNoTracking().Where(x => x.OptionId == optionid)?.ToList();
+			List<DpfLoadElement> rowsLoad2 = _context.DpfLoadElement.AsNoTracking().Where(x => x.OptionId == optionid)?.ToList();
+			List<DpfPvsystem> rowsPV = _context.DpfPvsystem.AsNoTracking().Where(x => x.OptionId == optionid)?.ToList();
+			List<DpfElectricVehicle> rowsEV = _context.DpfElectricVehicle.AsNoTracking().Where(x => x.OptionId == optionid)?.ToList();
+			List<DpfStorage> rowsES = _context.DpfStorage.AsNoTracking().Where(x => x.OptionId == optionid)?.ToList();
+            List<DpfMicrogrid> rowsMG = _context.DpfMicrogrid.AsNoTracking().Where(x => x.OptionId == optionid)?.ToList();
+            List<DpfGenerator> rowsGE = _context.DpfGenerator.AsNoTracking().Where(x => x.OptionId == optionid)?.ToList();
+
