@@ -7,3 +7,36 @@ INNER JOIN DPF_ProfileDetail PD WITH(NOLOCK) ON DP.ID = PD.ProfileID
 INNER JOIN DPF_ProfileData A WITH(NOLOCK) ON A.ProfileDetailID = PD.ID 
 where A.ProfileDetailID IN (4,5,6,7) 
 ORDER BY ProfileID, Interval;
+
+
+public async Task<List<YourResultType>> GetProfileDataAsync(List<int> profileDetailIds)
+{
+    using (var dbContext = new YourDbContext())
+    {
+        var query = from dp in dbContext.DPF_Profile.AsNoTracking()
+                    join pd in dbContext.DPF_ProfileDetail.AsNoTracking() on dp.ID equals pd.ProfileID
+                    join a in dbContext.DPF_ProfileData.AsNoTracking() on pd.ID equals a.ProfileDetailID
+                    where profileDetailIds.Contains(a.ProfileDetailID)
+                    orderby a.ProfileDetailID, a.Interval
+                    select new YourResultType
+                    {
+                        ProfileID = a.ProfileDetailID,
+                        Interval = a.Interval,
+                        P = a.ActivePower,
+                        Q = a.ReactivePower,
+                        P_Z = a.ActivePowerConstantImpedancePU,
+                        P_I = a.ActivePowerConstantCurrentPU,
+                        P_P = a.ActivePowerConstantPowerPU,
+                        Q_Z = a.ReactivePowerConstantImpedancePU,
+                        Q_I = a.ReactivePowerConstantCurrentPU,
+                        Q_P = a.ReactivePowerConstantPowerPU
+                    };
+
+        return await query.ToListAsync();
+    }
+}
+
+
+
+
+
