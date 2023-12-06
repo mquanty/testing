@@ -45,5 +45,30 @@ LEFT JOIN WS_GEO_DataPoint Child with (nolock) ON Child.ParentId = Parent.Id
 INNER JOIN WS_GEO_Marker M with (nolock) ON M.Id = Child.MarkerId AND M.ObjectType IN ('Meter', 'Solar', 'EV', 'Battery', 'Microgrid', 'Backup Generator') 
 WHERE T.OptionID = 432;
 
+public async Task<List<object>> GetTransformerDetailsAsync(int optionId)
+{
+    using (var dbContext = new YourDbContext())
+    {
+        var objectTypeFilter = new List<string> { "Meter", "Solar", "EV", "Battery", "Microgrid", "Backup Generator" };
 
+        var query = from t in dbContext.DPF_Transformer.AsNoTracking()
+                    join parent in dbContext.WS_GEO_DataPoint.AsNoTracking() on t.TransformerName equals parent.Name
+                    join pMarker in dbContext.WS_GEO_Marker.AsNoTracking() on parent.MarkerId equals pMarker.Id
+                    where pMarker.ObjectType == "Transformer"
+                    join child in dbContext.WS_GEO_DataPoint.AsNoTracking() on parent.Id equals child.ParentId into childGroup
+                    from child in childGroup.DefaultIfEmpty()
+                    join m in dbContext.WS_GEO_Marker.AsNoTracking() on child.MarkerId equals m.Id
+                    where objectTypeFilter.Contains(m.ObjectType)
+                    where t.OptionID == optionId
+                    select new
+                    {
+                        DTR = t.TransformerName,
+                        Name = child.Name,
+                        FullName = child.FullName,
+                        DERTYPE = m.ObjectType
+                    };
+
+        return await query.ToListAsync();
+    }
+}
 
