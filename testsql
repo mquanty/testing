@@ -82,3 +82,10 @@ public async Task<List<object>> GetTransformerDetailsAsync(int optionId)
             List<DpfMicrogrid> rowsMG = _context.DpfMicrogrid.AsNoTracking().Where(x => x.OptionId == optionid)?.ToList();
             List<DpfGenerator> rowsGE = _context.DpfGenerator.AsNoTracking().Where(x => x.OptionId == optionid)?.ToList();
 
+
+
+select A.ID, A.Name as ProfileName, C.Name as PDataType, T.TimeResolution 
+FROM DPF_ProfileDetail A with(nolock) 
+INNER JOIN DPF_Profile P with(nolock) ON A.ProfileID = P.ID 
+INNER JOIN DPF_ProfileDataType C with(nolock) ON P.ProfileDataTypeID = C.ID
+INNER JOIN BSD_TimeResolution T with(nolock) ON T.ID = P.TimeResolutionID
