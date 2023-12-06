@@ -89,3 +89,25 @@ FROM DPF_ProfileDetail A with(nolock)
 INNER JOIN DPF_Profile P with(nolock) ON A.ProfileID = P.ID 
 INNER JOIN DPF_ProfileDataType C with(nolock) ON P.ProfileDataTypeID = C.ID
 INNER JOIN BSD_TimeResolution T with(nolock) ON T.ID = P.TimeResolutionID
+
+
+
+public async Task<List<YourResultType>> GetProfileDetailsAsync()
+{
+    using (var dbContext = new YourDbContext())
+    {
+        var query = from profileDetail in dbContext.DPF_ProfileDetail.AsNoTracking()
+                    join profile in dbContext.DPF_Profile.AsNoTracking() on profileDetail.ProfileID equals profile.ID
+                    join profileDataType in dbContext.DPF_ProfileDataType.AsNoTracking() on profile.ProfileDataTypeID equals profileDataType.ID
+                    join timeResolution in dbContext.BSD_TimeResolution.AsNoTracking() on profile.TimeResolutionID equals timeResolution.ID
+                    select new YourResultType
+                    {
+                        ID = profileDetail.ID,
+                        ProfileName = profile.Name,
+                        PDataType = profileDataType.Name,
+                        TimeResolution = timeResolution.TimeResolution
+                    };
+
+        return await query.ToListAsync();
+    }
+}
