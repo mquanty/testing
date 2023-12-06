@@ -1,0 +1,9 @@
+SELECT A.ProfileDetailID as ProfileID, A.Interval,
+A.ActivePower as P, A.ReactivePower as Q,
+A.ActivePowerConstantImpedancePU as P_Z, A.ActivePowerConstantCurrentPU as P_I, A.ActivePowerConstantPowerPU as P_P, 
+A.ReactivePowerConstantImpedancePU as Q_Z, A.ReactivePowerConstantCurrentPU as Q_I, A.ReactivePowerConstantPowerPU as Q_P 
+FROM DPF_Profile DP WITH(NOLOCK) 
+INNER JOIN DPF_ProfileDetail PD WITH(NOLOCK) ON DP.ID = PD.ProfileID 
+INNER JOIN DPF_ProfileData A WITH(NOLOCK) ON A.ProfileDetailID = PD.ID 
+where A.ProfileDetailID IN (4,5,6,7) 
+ORDER BY ProfileID, Interval;
