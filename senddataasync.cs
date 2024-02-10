@@ -8,107 +8,41 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
+/// <summary>
+/// A static helper class for making HTTP requests.
+/// </summary>
 public static class HttpClientHelper
 {
-    private static readonly HttpClient client = new HttpClient();
-    private static readonly X509Certificate2 clientCertificate;
-	private static int timeout = 100;
-	// Set the path to the client certificate and its password
-	string certPath = "client_certificate.pfx";
-	string certPassword = "password";
-	
-    //static HttpClientHelper() { client = new HttpClient(); }
+    private static readonly HttpClient client;
+    private static readonly int timeout = 30; // Timeout in seconds
+    private static readonly string certPath = "client_certificate.pfx"; // Path to the client certificate
+    private static readonly string certPassword = "password"; // Password for the client certificate
 
-	/// <summary>
-    /// Sends an HTTP request asynchronously and returns the response.
+    static HttpClientHelper()
+    {
+        client = new HttpClient();
+        client.Timeout = TimeSpan.FromSeconds(timeout);
+    }
+
+    /// <summary>
+    /// Sends an HTTP request asynchronously and returns the response body deserialized into the specified type.
     /// </summary>
-    /// <typeparam name="T">The type of the response object.</typeparam>
-    /// <param name="method">The HTTP method (GET, POST, etc.).</param>
-    /// <param name="url">The URL of the request.</param>
-    /// <param name="payload">The request payload (if any).</param>
-    /// <param name="queryParams">The query parameters (if any).</param>
-    /// <param name="headers">The additional headers (if any).</param>
+    /// <typeparam name="T">The type to deserialize the response body into.</typeparam>
+    /// <param name="method">The HTTP method.</param>
+    /// <param name="url">The URL to send the request to.</param>
+    /// <param name="payload">The payload of the request.</param>
+    /// <param name="queryParams">The query parameters to include in the request URL.</param>
+    /// <param name="headers">The additional headers to include in the request.</param>
     /// <param name="authenticationType">The type of authentication to use.</param>
-	  /// <param name="username">The username (if authentication type is HTTP Basic authentication).</param>
-	  /// <param name="password">The password (if authentication type is HTTP Basic authentication).</param>
-    /// <param name="accessToken">The OAuth2 access token (if authentication type is OAuth2).</param>
-    /// <returns>The deserialized response object.</returns>
-    /// <example>
-    /// <code>
-    /// // Example usage:
-    /// var headers = new Dictionary&lt;string, string&gt;() {{ "Authorization", "Bearer token" }};
-    /// var response = await HttpClientHelper.SendHttpRequestAsync&lt;MyResponseClass&gt;(HttpMethod.Get, "https://example.com/api/resource", headers: headers, authenticationType: AuthenticationType.None);
-    /// Console.WriteLine($"Response: {response}");
-    /// </code>
-    /// </example>
-    public static async Task<T> SendHttpRequestAsync<T>(HttpMethod method, string url, string payload = null, Dictionary<string, string> queryParams = null, Dictionary<string, string> headers = null, AuthenticationType authenticationType = AuthenticationType.None, string username = null, string password = null, string accessToken = null))
+    /// <param name="username">The username for HTTP basic authentication.</param>
+    /// <param name="password">The password for HTTP basic authentication.</param>
+    /// <param name="token">The OAuth2 token for authentication.</param>
+    /// <returns>The deserialized response body and cookies received in the response.</returns>
+	public static async Task<T> SendHttpRequestAsync<T>(HttpMethod method, string url, string payload = null, Dictionary<string, string> queryParams = null, Dictionary<string, string> headers = null, AuthenticationType authenticationType = AuthenticationType.None, string username = null, string password = null, string token = null)
     {
         try
         {
-            // Construct URL with query parameters if provided
-            if (queryParams != null && queryParams.Count > 0)
-            {
-                var queryString = new StringBuilder();
-                foreach (var param in queryParams)
-                {
-                    queryString.Append($"{param.Key}={param.Value}&");
-                }
-                url += "?" + queryString.ToString().TrimEnd('&');
-            }
-
-            // Create HTTP request message
-            var request = new HttpRequestMessage(method, url);
-
-            // Add payload if provided
-            if (!string.IsNullOrEmpty(payload))
-            {
-                request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
-            }
-
-            // Add additional headers if provided
-            if (headers != null && headers.Count > 0)
-            {
-                foreach (var header in headers)
-                {
-                    request.Headers.Add(header.Key, header.Value);
-                }
-            }
-
-            // Add authentication if specified
-            if (authenticationType == AuthenticationType.OAuth2 && !string.IsNullOrEmpty(accessToken))
-            {
-                // Add OAuth2 access token to the Authorization header
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            }
-            else if (authenticationType == AuthenticationType.HttpBasic && !string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
-            {
-                var byteArray = Encoding.ASCII.GetBytes($"{username}:{password}");
-                request.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
-            }
-
-            // Add SSL/TLS certificate if enabled
-            if (authenticationType == AuthenticationType.SslClientCertificate)
-            {
-				// Load the client certificate
-				clientCertificate = new X509Certificate2(certPath, certPassword);
-                var handler = new HttpClientHandler();
-                handler.ClientCertificates.Add(clientCertificate);
-                client = new HttpClient(handler);
-            }
-			
-			// Add TimeOut parameters
-			client.Timeout = TimeSpan.FromSeconds(timeout);
-			
-            // Send HTTP request and get response
-            var response = await client.SendAsync(request);
-
-            // Ensure successful response
-            response.EnsureSuccessStatusCode();
-
-            // Read response content and deserialize to type T
-            var responseBody = await response.Content.ReadAsStringAsync();
-            var result = JsonSerializer.Deserialize<T>(responseBody);
-
+            var (result, _) = await SendHttpRequestAsyncInternal<T>(method, url, payload, queryParams, headers, authenticationType, username, password, token);
             return result;
         }
         catch (HttpRequestException e)
@@ -117,13 +51,115 @@ public static class HttpClientHelper
             throw;
         }
     }
+	
+	/// <summary>
+    /// Sends an HTTP request asynchronously and returns the response body deserialized into the specified type with Cookies
+    /// </summary>
+    public static async Task<(T, IEnumerable<Cookie>)> SendHttpRequestAsync<T>(HttpMethod method, string url, string payload = null, Dictionary<string, string> queryParams = null, Dictionary<string, string> headers = null, AuthenticationType authenticationType = AuthenticationType.None, string username = null, string password = null, string token = null)
+    {
+        try
+        {
+            return await SendHttpRequestAsyncInternal<T>(method, url, payload, queryParams, headers, authenticationType, username, password, token);
+        }
+        catch (HttpRequestException e)
+        {
+            Console.WriteLine($"HTTP request failed: {e.Message}");
+            throw;
+        }
+    }
+
+    private static async Task<(T, IEnumerable<Cookie>)> SendHttpRequestAsyncInternal<T>(HttpMethod method, string url, string payload, Dictionary<string, string> queryParams, Dictionary<string, string> headers, AuthenticationType authenticationType, string username, string password, string token)
+    {
+        // Construct URL with query parameters if provided
+        if (queryParams != null && queryParams.Count > 0)
+        {
+            var queryString = new StringBuilder();
+            foreach (var param in queryParams)
+            {
+                queryString.Append($"{param.Key}={param.Value}&");
+            }
+            url += "?" + queryString.ToString().TrimEnd('&');
+        }
+
+        // Create HTTP request message
+        var request = new HttpRequestMessage(method, url);
+
+        // Add payload if provided
+        if (!string.IsNullOrEmpty(payload))
+        {
+            request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
+        }
+
+        // Add additional headers if provided
+        if (headers != null && headers.Count > 0)
+        {
+            foreach (var header in headers)
+            {
+                request.Headers.Add(header.Key, header.Value);
+            }
+        }
+
+        // Add authentication if specified
+        if (authenticationType == AuthenticationType.HttpBasic && !string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
+        {
+            var byteArray = Encoding.ASCII.GetBytes($"{username}:{password}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
+        }
+        else if (authenticationType == AuthenticationType.OAuth2 && !string.IsNullOrEmpty(token))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+
+        // Send HTTP request and get response
+        var response = await client.SendAsync(request);
+
+        // Ensure successful response
+        response.EnsureSuccessStatusCode();
+
+        // Read response content and deserialize to type T
+        var responseBody = await response.Content.ReadAsStringAsync();
+        var result = JsonSerializer.Deserialize<T>(responseBody);
+
+        // Get cookies from the response
+        IEnumerable<Cookie> cookies = GetCookiesFromResponse(response);
+
+        return (result, cookies);
+    }
+
+    private static IEnumerable<Cookie> GetCookiesFromResponse(HttpResponseMessage response)
+    {
+        IEnumerable<string> cookieValues;
+        if (response.Headers.TryGetValues("Set-Cookie", out cookieValues))
+        {
+            foreach (var cookieValue in cookieValues)
+            {
+                var cookie = SetCookieHeaderValue.Parse(cookieValue);
+                yield return new Cookie(cookie.Name.Value, cookie.Value.Value, cookie.Path.Value, cookie.Domain.Value);
+            }
+        }
+    }
 }
 
+/// <summary>
+/// Enumeration representing different types of authentication.
+/// </summary>
 public enum AuthenticationType
 {
+    /// <summary>
+    /// No authentication.
+    /// </summary>
     None,
+    /// <summary>
+    /// OAuth2 token-based authentication.
+    /// </summary>
     OAuth2,
+    /// <summary>
+    /// HTTP Basic authentication.
+    /// </summary>
     HttpBasic,
+    /// <summary>
+    /// SSL client certificate authentication.
+    /// </summary>
     SslClientCertificate
 }
 
@@ -146,8 +182,14 @@ public class MyClass
         try
         {
             // Example usage of SendHttpRequestAsync function
-            var response = HttpClientHelper.SendHttpRequestAsync<MyResponseClass>(HttpMethod.Get, apiUrl, headers: headers, queryParams: queryParams, authenticationType: AuthenticationType.HttpBasic, username: "username", password: "password").Result;
+            var (response, cookies) = HttpClientHelper.SendHttpRequestAsync<MyResponseClass>(HttpMethod.Get, apiUrl, headers: headers, queryParams: queryParams, authenticationType: AuthenticationType.HttpBasic, username: "username", password: "password").Result;
             Console.WriteLine($"Response: {response}");
+
+            // Example usage of cookies
+            foreach (var cookie in cookies)
+            {
+                Console.WriteLine($"Cookie: {cookie.Name}={cookie.Value}");
+            }
         }
         catch (Exception ex)
         {
