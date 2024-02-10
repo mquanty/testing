@@ -38,7 +38,7 @@ public static class HttpClientHelper
     /// <param name="password">The password for HTTP basic authentication.</param>
     /// <param name="token">The OAuth2 token for authentication.</param>
     /// <returns>The deserialized response body and cookies received in the response.</returns>
-	public static async Task<T> SendHttpRequestAsync<T>(HttpMethod method, string url, string payload = null, Dictionary<string, string> queryParams = null, Dictionary<string, string> headers = null, AuthenticationType authenticationType = AuthenticationType.None, string username = null, string password = null, string token = null)
+    public static async Task<T> SendHttpRequestAsync<T>(HttpMethod method, string url, string payload = null, Dictionary<string, string> queryParams = null, Dictionary<string, string> headers = null, AuthenticationType authenticationType = AuthenticationType.None, string username = null, string password = null, string token = null)
     {
         try
         {
@@ -51,8 +51,8 @@ public static class HttpClientHelper
             throw;
         }
     }
-	
-	/// <summary>
+    
+     /// <summary>
     /// Sends an HTTP request asynchronously and returns the response body deserialized into the specified type with Cookies
     /// </summary>
     public static async Task<(T, IEnumerable<Cookie>)> SendHttpRequestAsync<T>(HttpMethod method, string url, string payload = null, Dictionary<string, string> queryParams = null, Dictionary<string, string> headers = null, AuthenticationType authenticationType = AuthenticationType.None, string username = null, string password = null, string token = null)
@@ -183,13 +183,42 @@ public class MyClass
         {
             // Example usage of SendHttpRequestAsync function
             var (response, cookies) = HttpClientHelper.SendHttpRequestAsync<MyResponseClass>(HttpMethod.Get, apiUrl, headers: headers, queryParams: queryParams, authenticationType: AuthenticationType.HttpBasic, username: "username", password: "password").Result;
-            Console.WriteLine($"Response: {response}");
 
-            // Example usage of cookies
-            foreach (var cookie in cookies)
+            if (response != null)
             {
-                Console.WriteLine($"Cookie: {cookie.Name}={cookie.Value}");
+                Console.WriteLine($"Response: {response}");
+
+                // Example usage of cookies
+                foreach (var cookie in cookies)
+                {
+                    Console.WriteLine($"Cookie: {cookie.Name}={cookie.Value}");
+                }
+
+                // Check if response indicates success
+                if (response.StatusCode == HttpStatusCode.OK)
+                {
+                    // HTTP 200 OK - Request successful
+                    Console.WriteLine($"Request was successful. Response: {response}");
+                }
+                else
+                {
+                    // Handle other status codes
+                    Console.WriteLine($"Request failed with status code: {response.StatusCode}");
+                }
             }
+            else
+            {
+                Console.WriteLine("No response received.");
+            }
+        }
+        catch (AggregateException ex) when (ex.InnerException is HttpRequestException)
+        {
+            Console.WriteLine($"HTTP request failed: {ex.InnerException.Message}");
+        }
+        catch (HttpRequestException ex)
+        {
+            // Handle HTTP request exception
+            Console.WriteLine($"HTTP request failed: {ex.Message}");
         }
         catch (Exception ex)
         {
@@ -197,6 +226,7 @@ public class MyClass
         }
     }
 }
+
 
 public class MyResponseClass
 {
