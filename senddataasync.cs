@@ -9,7 +9,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 
 /// <summary>
-/// A static helper class for making HTTP requests.
+/// A static helper class for making HTTP requests with retry logic for transient failures.
 /// </summary>
 public static class HttpClientHelper
 {
@@ -17,6 +17,9 @@ public static class HttpClientHelper
     private static readonly int timeout = 30; // Timeout in seconds
     private static readonly string certPath = "client_certificate.pfx"; // Path to the client certificate
     private static readonly string certPassword = "password"; // Password for the client certificate
+    private const int maxRetryAttempts = 3; // Maximum number of retry attempts
+    private const int delayBetweenRetriesMs = 1000; // Delay between retry attempts in milliseconds
+    private static bool retryOnTransientFailure = false; // Whether to retry on transient failures
 
     static HttpClientHelper()
     {
@@ -37,34 +40,53 @@ public static class HttpClientHelper
     /// <param name="username">The username for HTTP basic authentication.</param>
     /// <param name="password">The password for HTTP basic authentication.</param>
     /// <param name="token">The OAuth2 token for authentication.</param>
-    /// <returns>The deserialized response body and cookies received in the response.</returns>
+    /// <returns>The deserialized response body.</returns>
     public static async Task<T> SendHttpRequestAsync<T>(HttpMethod method, string url, string payload = null, Dictionary<string, string> queryParams = null, Dictionary<string, string> headers = null, AuthenticationType authenticationType = AuthenticationType.None, string username = null, string password = null, string token = null)
     {
-        try
+        int retryCount = 0;
+        while (true)
         {
-            var (result, _) = await SendHttpRequestAsyncInternal<T>(method, url, payload, queryParams, headers, authenticationType, username, password, token);
-            return result;
-        }
-        catch (HttpRequestException e)
-        {
-            Console.WriteLine($"HTTP request failed: {e.Message}");
-            throw;
+            try
+            {
+                var (result, _) = await SendHttpRequestAsyncInternal<T>(method, url, payload, queryParams, headers, authenticationType, username, password, token);
+                return result;
+            }
+            catch (HttpRequestException ex) when (retryOnTransientFailure && retryCount < maxRetryAttempts && IsTransientFailure(ex))
+            {
+                retryCount++;
+                await Task.Delay(delayBetweenRetriesMs);
+            }
         }
     }
-    
-     /// <summary>
-    /// Sends an HTTP request asynchronously and returns the response body deserialized into the specified type with Cookies
+
+    /// <summary>
+    /// Sends an HTTP request asynchronously and returns the response body deserialized into the specified type along with the cookies received in the response.
     /// </summary>
+    /// <typeparam name="T">The type to deserialize the response body into.</typeparam>
+    /// <param name="method">The HTTP method.</param>
+    /// <param name="url">The URL to send the request to.</param>
+    /// <param name="payload">The payload of the request.</param>
+    /// <param name="queryParams">The query parameters to include in the request URL.</param>
+    /// <param name="headers">The additional headers to include in the request.</param>
+    /// <param name="authenticationType">The type of authentication to use.</param>
+    /// <param name="username">The username for HTTP basic authentication.</param>
+    /// <param name="password">The password for HTTP basic authentication.</param>
+    /// <param name="token">The OAuth2 token for authentication.</param>
+    /// <returns>The deserialized response body and cookies received in the response.</returns>
     public static async Task<(T, IEnumerable<Cookie>)> SendHttpRequestAsync<T>(HttpMethod method, string url, string payload = null, Dictionary<string, string> queryParams = null, Dictionary<string, string> headers = null, AuthenticationType authenticationType = AuthenticationType.None, string username = null, string password = null, string token = null)
     {
-        try
+        int retryCount = 0;
+        while (true)
         {
-            return await SendHttpRequestAsyncInternal<T>(method, url, payload, queryParams, headers, authenticationType, username, password, token);
-        }
-        catch (HttpRequestException e)
-        {
-            Console.WriteLine($"HTTP request failed: {e.Message}");
-            throw;
+            try
+            {
+                return await SendHttpRequestAsyncInternal<T>(method, url, payload, queryParams, headers, authenticationType, username, password, token);
+            }
+            catch (HttpRequestException ex) when (retryOnTransientFailure && retryCount < maxRetryAttempts && IsTransientFailure(ex))
+            {
+                retryCount++;
+                await Task.Delay(delayBetweenRetriesMs);
+            }
         }
     }
 
@@ -138,6 +160,24 @@ public static class HttpClientHelper
             }
         }
     }
+
+    private static bool IsTransientFailure(Exception ex)
+    {
+        if (ex is HttpRequestException httpEx)
+        {
+            return httpEx.StatusCode == HttpStatusCode.ServiceUnavailable || httpEx.StatusCode == HttpStatusCode.GatewayTimeout;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Enables or disables retry on transient failures.
+    /// </summary>
+    /// <param name="retry">True to enable retry on transient failures, false otherwise.</param>
+    public static void SetRetryOnTransientFailure(bool retry)
+    {
+        retryOnTransientFailure = retry;
+    }
 }
 
 /// <summary>
@@ -165,7 +205,7 @@ public enum AuthenticationType
 
 public class MyClass
 {
-    public void MyMethod()
+    public void MyMethod(bool withRetry)
     {
         string apiUrl = "https://example.com/api/resource";
         string payload = "{\"key\": \"value\"}";
@@ -181,39 +221,43 @@ public class MyClass
 
         try
         {
+			HttpClientHelper.SetRetryOnTransientFailure(true);
             // Example usage of SendHttpRequestAsync function
-            var (response, cookies) = HttpClientHelper.SendHttpRequestAsync<MyResponseClass>(HttpMethod.Get, apiUrl, headers: headers, queryParams: queryParams, authenticationType: AuthenticationType.HttpBasic, username: "username", password: "password").Result;
-
+			var response = HttpClientHelper.SendHttpRequestAsync<MyResponseClass>(HttpMethod.Get, apiUrl, headers: headers, queryParams: queryParams, authenticationType: AuthenticationType.HttpBasic, username: "username", password: "password").Result;
+            var (response2, cookies) = HttpClientHelper.SendHttpRequestAsync<MyResponseClass>(HttpMethod.Get, apiUrl, headers: headers, queryParams: queryParams, authenticationType: AuthenticationType.HttpBasic, username: "username", password: "password").Result;
+			// Check if response is null
+			
             if (response != null)
             {
                 Console.WriteLine($"Response: {response}");
 
                 // Example usage of cookies
                 foreach (var cookie in cookies)
-                {
                     Console.WriteLine($"Cookie: {cookie.Name}={cookie.Value}");
-                }
 
                 // Check if response indicates success
-                if (response.StatusCode == HttpStatusCode.OK)
+                if ((response.StatusCode >= 200 && response.StatusCode < 300)) //response.StatusCode == HttpStatusCode.OK
                 {
-                    // HTTP 200 OK - Request successful
                     Console.WriteLine($"Request was successful. Response: {response}");
                 }
                 else
                 {
                     // Handle other status codes
                     Console.WriteLine($"Request failed with status code: {response.StatusCode}");
+					if (response.Exception != null)
+						Console.WriteLine($"Exception details: {response.Exception.Message}");
                 }
             }
-            else
-            {
-                Console.WriteLine("No response received.");
-            }
+			else
+			{
+				Console.WriteLine("No response received.");
+			}
+			
         }
         catch (HttpRequestException ex)
         {
-            // Handle HTTP request exception
+            //if (ex.InnerException is WebException webEx && webEx.Response is HttpWebResponse httpWebResponse)
+            //    Console.WriteLine($"HTTP error: {httpWebResponse.StatusCode} - {httpWebResponse.StatusDescription}");
             Console.WriteLine($"HTTP request failed: {ex.Message}");
         }
         catch (Exception ex)
