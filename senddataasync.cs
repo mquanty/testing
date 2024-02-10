@@ -211,10 +211,6 @@ public class MyClass
                 Console.WriteLine("No response received.");
             }
         }
-        catch (AggregateException ex) when (ex.InnerException is HttpRequestException)
-        {
-            Console.WriteLine($"HTTP request failed: {ex.InnerException.Message}");
-        }
         catch (HttpRequestException ex)
         {
             // Handle HTTP request exception
