@@ -550,11 +550,22 @@ if __name__ == "__main__":
 
 
 Input Tables and Columns:
-
-DPF_Options: Columns used are OptionID and ExecutionTypeID.DGM_PhaseType: Columns used are ID and Name.DPF_ObjectType: Columns used are ObjectTypeID and ObjectType.DPF_Transformer: Columns used are OptionID and TransformerName.WS_GEO_DataPoint: Columns used are Name, ParentId, and MarkerId.WS_GEO_Marker: Columns used are Id and ObjectType.OPF_Output_Transformer: Columns used are NodeName, OptionID, ExecutionTypeID, PhaseID, and TimeResolutionID.OPF_Objective: Columns used are ID and ShortName.DPF_ExecutionType: Columns used are ID and Name.DPF_PVSystem: Columns used are PVSystemName and PowerRatingkVA.OPF_DOE_DER_Generation: Columns used are NodeName, Interval, TimeResolutionID, ExecutionTypeID, OptionID, and DerName.DPF_Storage: Columns used are StorageName and RatedkWh.DPF_ElectricVehicle: Columns used are Name and RatedkWh.DPF_Microgrid: Columns used are Name and RatedkWh.
+DPF_Options: Columns used are OptionID and ExecutionTypeID.
+DGM_PhaseType: Columns used are ID and Name
+DPF_ObjectType: Columns used are ObjectTypeID and ObjectType.
+DPF_Transformer: Columns used are OptionID and TransformerName.
+WS_GEO_DataPoint: Columns used are Name, ParentId, and MarkerId.
+WS_GEO_Marker: Columns used are Id and ObjectType.
+OPF_Output_Transformer: Columns used are NodeName, OptionID, ExecutionTypeID, PhaseID, and TimeResolutionID.
+OPF_Objective: Columns used are ID and ShortName.
+DPF_ExecutionType: Columns used are ID and Name.
+DPF_PVSystem: Columns used are PVSystemName and PowerRatingkVA.
+OPF_DOE_DER_Generation: Columns used are NodeName, Interval, TimeResolutionID, ExecutionTypeID, OptionID, and DerName.
+DPF_Storage: Columns used are StorageName and RatedkWh.
+DPF_ElectricVehicle: Columns used are Name and RatedkWh.
+DPF_Microgrid: Columns used are Name and RatedkWh.
 
 Output Table and Columns:
-
 OPF_Output_DER: Columns are OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, MeterName, PhaseID, ObjectTypeID, DERName, DERRating, DERDOECoefficient, PVForecast, DERPVCurtailmentkW, kW, kVAR, DOEPowerFactor, and StateOfEnergyKWh.
 
 The stored procedure takes various inputs, performs calculations and joins across multiple tables, and inserts the computed results into the OPF_Output_DER table.
