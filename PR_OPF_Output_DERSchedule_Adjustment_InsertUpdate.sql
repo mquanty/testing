@@ -382,38 +382,21 @@ conn.close()
 
 	
 Input Tables and Columns:
-DPF_Options:
-Columns: OptionID, ExecutionTypeID, ExecutionSourceID, OPFObjectiveID
-DPF_DERScheduleMessage:
-Columns: ID
-DPF_ObjectType:
-Columns: ObjectTypeID, ObjectType
-WS_GEO_DataPoint:
-Columns: Id, ParentId, Name, MarkerId
-WS_GEO_Marker:
-Columns: Id, ObjectType
-OPF_Output_Transformer:
-Columns: OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, ActivePowerkW, PhaseID, ObjectTypeID, DERScheduleMessageID, OPFObjectiveID
-DPF_ExecutionType:
-Columns: ID, Name
-DPF_PVSystem:
-Columns: PVSystemName, OptionID
-DPF_Storage:
-Columns: StorageName, OptionID
-DPF_ElectricVehicle:
-Columns: Name, OptionID
-DPF_Microgrid:
-Columns: Name, OptionID
-DPF_Generator:
-Columns: GeneratorName, OptionID
+DPF_Options: Columns: OptionID, ExecutionTypeID, ExecutionSourceID, OPFObjectiveID
+DPF_DERScheduleMessage: Columns: ID
+DPF_ObjectType: Columns: ObjectTypeID, ObjectType
+WS_GEO_DataPoint: Columns: Id, ParentId, Name, MarkerId
+WS_GEO_Marker: Columns: Id, ObjectType
+OPF_Output_Transformer: Columns: OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, ActivePowerkW, PhaseID, ObjectTypeID, DERScheduleMessageID, OPFObjectiveID
+DPF_ExecutionType: Columns: ID, Name
+DPF_PVSystem: Columns: PVSystemName, OptionID
+DPF_Storage: Columns: StorageName, OptionID
+DPF_ElectricVehicle: Columns: Name, OptionID
+DPF_Microgrid: Columns: Name, OptionID
+DPF_Generator: Columns: GeneratorName, OptionID
 Output Tables and Columns:
-#Result:
-Columns: OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, pAdjustAggregation, MeterName, PhaseID, ElementTypeID, ElementType, AssociatedDERName, ScheduledDERName, ScheduleDERValue, ABSpAdjustAggregation, ABSScheduleDERValue, IsBatteryCharge
-#TotalScheduledTable:
-Columns: OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, pAdjustAggregation, MeterName, PhaseID, ElementTypeID, ElementType, AssociatedDERName, ScheduledDERName, ScheduleDERValue, ABSpAdjustAggregation, ABSScheduleDERValue, IsBatteryCharge, AdjustedKWTransformer, TotalScheduleTransformer
-#AdjustmentCoefficient:
-Columns: OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, pAdjustAggregation, MeterName, PhaseID, ElementTypeID, ElementType, AssociatedDERName, ScheduledDERName, ScheduleDERValue, ABSpAdjustAggregation, ABSScheduleDERValue, IsBatteryCharge, AdjustedKWTransformer, TotalScheduleTransformer, AdjustmentCoefficient
-#Final:
-Columns: OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, pAdjustAggregation, MeterName, PhaseID, ElementTypeID, ElementType, AssociatedDERName, ScheduledDERName, ScheduleDERValue, ABSpAdjustAggregation, ABSScheduleDERValue, IsBatteryCharge, AdjustedKWTransformer, TotalScheduleTransformer, AdjustmentCoefficient, AdjustedKWDER
-OPF_Output_DER:
-Columns: OptionID, SubstationID, ExecutionSourceID, OPFObjectiveID, DERScheduleMessageID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, MeterName, PhaseID, ObjectTypeID, DERName, kW
+#Result: Columns: OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, pAdjustAggregation, MeterName, PhaseID, ElementTypeID, ElementType, AssociatedDERName, ScheduledDERName, ScheduleDERValue, ABSpAdjustAggregation, ABSScheduleDERValue, IsBatteryCharge
+#TotalScheduledTable: Columns: OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, pAdjustAggregation, MeterName, PhaseID, ElementTypeID, ElementType, AssociatedDERName, ScheduledDERName, ScheduleDERValue, ABSpAdjustAggregation, ABSScheduleDERValue, IsBatteryCharge, AdjustedKWTransformer, TotalScheduleTransformer
+#AdjustmentCoefficient: Columns: OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, pAdjustAggregation, MeterName, PhaseID, ElementTypeID, ElementType, AssociatedDERName, ScheduledDERName, ScheduleDERValue, ABSpAdjustAggregation, ABSScheduleDERValue, IsBatteryCharge, AdjustedKWTransformer, TotalScheduleTransformer, AdjustmentCoefficient
+#Final: Columns: OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, pAdjustAggregation, MeterName, PhaseID, ElementTypeID, ElementType, AssociatedDERName, ScheduledDERName, ScheduleDERValue, ABSpAdjustAggregation, ABSScheduleDERValue, IsBatteryCharge, AdjustedKWTransformer, TotalScheduleTransformer, AdjustmentCoefficient, AdjustedKWDER
+OPF_Output_DER: Columns: OptionID, SubstationID, ExecutionSourceID, OPFObjectiveID, DERScheduleMessageID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, MeterName, PhaseID, ObjectTypeID, DERName, kW
