@@ -223,3 +223,197 @@ BEGIN
 	DROP TABLE #Final
 	DROP TABLE #Result
 END	
+
+
+
+
+from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, select, delete, insert, update
+
+# Connect to the SQL Server database
+engine = create_engine('mssql+pyodbc://username:password@server/database')
+conn = engine.connect()
+
+# Define metadata
+metadata = MetaData()
+
+# Define tables
+DPF_Options = Table('DPF_Options', metadata,
+    Column('OptionID', Integer),
+    Column('ExecutionTypeID', Integer),
+    Column('ExecutionSourceID', Integer),
+    Column('OPFObjectiveID', Integer)
+)
+
+DPF_DERScheduleMessage = Table('DPF_DERScheduleMessage', metadata,
+    Column('ID', Integer)
+)
+
+DPF_ObjectType = Table('DPF_ObjectType', metadata,
+    Column('ObjectTypeID', Integer),
+    Column('ObjectType', String)
+)
+
+# Define other tables similarly
+
+# Define derived table
+NodeLevelData = Table('NodeLevelData', metadata,
+    Column('OptionID', Integer),
+    Column('SubstationID', Integer),
+    Column('FeederID', Integer),
+    Column('ExecutionTypeID', Integer),
+    Column('TimeResolutionID', Integer),
+    Column('Interval', Integer),
+    Column('NodeName', String),
+    Column('pAdjustAggregation', Float),
+    Column('MeterName', String),
+    Column('PhaseID', Integer),
+    Column('ElementTypeID', Integer),
+    Column('ElementType', String),
+    Column('AssociatedDERName', String),
+    Column('ScheduledDERName', String),
+    Column('ScheduleDERValue', Float)
+)
+
+# Define temporary tables
+Result = Table('Result', metadata,
+    Column('OptionID', Integer),
+    Column('SubstationID', Integer),
+    Column('FeederID', Integer),
+    Column('ExecutionTypeID', Integer),
+    Column('TimeResolutionID', Integer),
+    Column('Interval', Integer),
+    Column('NodeName', String),
+    Column('pAdjustAggregation', Float),
+    Column('MeterName', String),
+    Column('PhaseID', Integer),
+    Column('ElementTypeID', Integer),
+    Column('ElementType', String),
+    Column('AssociatedDERName', String),
+    Column('ScheduledDERName', String),
+    Column('ScheduleDERValue', Float),
+    Column('ABSpAdjustAggregation', Float),
+    Column('ABSScheduleDERValue', Float),
+    Column('IsBatteryCharge', Integer)
+)
+
+TotalScheduledTable = Table('TotalScheduledTable', metadata,
+    Column('OptionID', Integer),
+    Column('SubstationID', Integer),
+    Column('FeederID', Integer),
+    Column('ExecutionTypeID', Integer),
+    Column('TimeResolutionID', Integer),
+    Column('Interval', Integer),
+    Column('NodeName', String),
+    Column('AdjustedKWTransformer', Float),
+    Column('TotalScheduleTransformer', Float)
+)
+
+AdjustmentCoefficient = Table('AdjustmentCoefficient', metadata,
+    Column('OptionID', Integer),
+    Column('SubstationID', Integer),
+    Column('FeederID', Integer),
+    Column('ExecutionTypeID', Integer),
+    Column('TimeResolutionID', Integer),
+    Column('Interval', Integer),
+    Column('NodeName', String),
+    Column('AdjustmentCoefficient', Float)
+)
+
+Final = Table('Final', metadata,
+    Column('OptionID', Integer),
+    Column('SubstationID', Integer),
+    Column('FeederID', Integer),
+    Column('ExecutionTypeID', Integer),
+    Column('TimeResolutionID', Integer),
+    Column('Interval', Integer),
+    Column('NodeName', String),
+    Column('AdjustedKWDER', Float)
+)
+
+# Select data from DPF_Options
+query = select([DPF_Options.c.OptionID, DPF_Options.c.ExecutionTypeID,
+                DPF_Options.c.ExecutionSourceID, DPF_Options.c.OPFObjectiveID])\
+            .where(DPF_Options.c.OptionID == 1)  # Assuming OptionID = 1
+
+result = conn.execute(query)
+option_data = result.fetchone()
+
+# Retrieve values from the result
+option_id = option_data['OptionID']
+execution_type_id = option_data['ExecutionTypeID']
+execution_source_id = option_data['ExecutionSourceID']
+opf_objective_id = option_data['OPFObjectiveID']
+
+# Select data from DPF_DERScheduleMessage
+query = select([DPF_DERScheduleMessage.c.ID])\
+            .order_by(DPF_DERScheduleMessage.c.ID.desc())\
+            .limit(1)
+
+result = conn.execute(query)
+derschedule_message_id = result.scalar()  # Get the ID value directly
+
+# Select data from DPF_ObjectType
+query = select([DPF_ObjectType.c.ObjectTypeID])\
+            .where(DPF_ObjectType.c.ObjectType.ilike('PVSYSTEM'))
+
+result = conn.execute(query)
+pv_object_type_id = result.scalar()  # Get the ObjectTypeID value directly
+
+query = select([DPF_ObjectType.c.ObjectTypeID])\
+            .where(DPF_ObjectType.c.ObjectType.ilike('STORAGE'))
+
+result = conn.execute(query)
+storage_object_type_id = result.scalar()  # Get the ObjectTypeID value directly
+
+# Delete records from OPF_Output_DER
+delete_query = delete(OPF_Output_DER).where(OPF_Output_DER.c.OptionID == option_id)\
+                                      .where(OPF_Output_DER.c.ExecutionTypeID == execution_type_id)
+
+conn.execute(delete_query)
+
+# Perform other operations (inserts, updates, etc.) using SQLAlchemy
+
+# Close the connection
+conn.close()
+
+							 THEN AdjustedKWDER * -1
+							 ELSE AdjustedKWDER 
+							 END
+
+	
+Input Tables and Columns:
+DPF_Options:
+Columns: OptionID, ExecutionTypeID, ExecutionSourceID, OPFObjectiveID
+DPF_DERScheduleMessage:
+Columns: ID
+DPF_ObjectType:
+Columns: ObjectTypeID, ObjectType
+WS_GEO_DataPoint:
+Columns: Id, ParentId, Name, MarkerId
+WS_GEO_Marker:
+Columns: Id, ObjectType
+OPF_Output_Transformer:
+Columns: OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, ActivePowerkW, PhaseID, ObjectTypeID, DERScheduleMessageID, OPFObjectiveID
+DPF_ExecutionType:
+Columns: ID, Name
+DPF_PVSystem:
+Columns: PVSystemName, OptionID
+DPF_Storage:
+Columns: StorageName, OptionID
+DPF_ElectricVehicle:
+Columns: Name, OptionID
+DPF_Microgrid:
+Columns: Name, OptionID
+DPF_Generator:
+Columns: GeneratorName, OptionID
+Output Tables and Columns:
+#Result:
+Columns: OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, pAdjustAggregation, MeterName, PhaseID, ElementTypeID, ElementType, AssociatedDERName, ScheduledDERName, ScheduleDERValue, ABSpAdjustAggregation, ABSScheduleDERValue, IsBatteryCharge
+#TotalScheduledTable:
+Columns: OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, pAdjustAggregation, MeterName, PhaseID, ElementTypeID, ElementType, AssociatedDERName, ScheduledDERName, ScheduleDERValue, ABSpAdjustAggregation, ABSScheduleDERValue, IsBatteryCharge, AdjustedKWTransformer, TotalScheduleTransformer
+#AdjustmentCoefficient:
+Columns: OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, pAdjustAggregation, MeterName, PhaseID, ElementTypeID, ElementType, AssociatedDERName, ScheduledDERName, ScheduleDERValue, ABSpAdjustAggregation, ABSScheduleDERValue, IsBatteryCharge, AdjustedKWTransformer, TotalScheduleTransformer, AdjustmentCoefficient
+#Final:
+Columns: OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, pAdjustAggregation, MeterName, PhaseID, ElementTypeID, ElementType, AssociatedDERName, ScheduledDERName, ScheduleDERValue, ABSpAdjustAggregation, ABSScheduleDERValue, IsBatteryCharge, AdjustedKWTransformer, TotalScheduleTransformer, AdjustmentCoefficient, AdjustedKWDER
+OPF_Output_DER:
+Columns: OptionID, SubstationID, ExecutionSourceID, OPFObjectiveID, DERScheduleMessageID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, MeterName, PhaseID, ObjectTypeID, DERName, kW
