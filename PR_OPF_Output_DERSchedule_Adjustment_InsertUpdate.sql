@@ -398,3 +398,86 @@ Output Tables and Columns:
 #AdjustmentCoefficient: Columns: OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, pAdjustAggregation, MeterName, PhaseID, ElementTypeID, ElementType, AssociatedDERName, ScheduledDERName, ScheduleDERValue, ABSpAdjustAggregation, ABSScheduleDERValue, IsBatteryCharge, AdjustedKWTransformer, TotalScheduleTransformer, AdjustmentCoefficient
 #Final: Columns: OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, pAdjustAggregation, MeterName, PhaseID, ElementTypeID, ElementType, AssociatedDERName, ScheduledDERName, ScheduleDERValue, ABSpAdjustAggregation, ABSScheduleDERValue, IsBatteryCharge, AdjustedKWTransformer, TotalScheduleTransformer, AdjustmentCoefficient, AdjustedKWDER
 OPF_Output_DER: Columns: OptionID, SubstationID, ExecutionSourceID, OPFObjectiveID, DERScheduleMessageID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, MeterName, PhaseID, ObjectTypeID, DERName, kW
+
+
+
+
+
+import pyodbc
+
+# Connect to the SQL Server database
+conn = pyodbc.connect('DRIVER={SQL Server};SERVER=server;DATABASE=database;UID=username;PWD=password')
+
+# Create a cursor
+cursor = conn.cursor()
+
+# Execute query to select data from DPF_Options
+cursor.execute("SELECT OptionID, ExecutionTypeID, ExecutionSourceID, OPFObjectiveID FROM DPF_Options WHERE OptionID = ?", (1,))
+option_data = cursor.fetchone()
+
+# Retrieve values from the result
+option_id = option_data[0]
+execution_type_id = option_data[1]
+execution_source_id = option_data[2]
+opf_objective_id = option_data[3]
+
+# Execute query to select the latest DERScheduleMessageID from DPF_DERScheduleMessage
+cursor.execute("SELECT TOP 1 ID FROM DPF_DERScheduleMessage ORDER BY ID DESC")
+derschedule_message_id = cursor.fetchone()[0]
+
+# Execute query to select ObjectTypeID for PVSYSTEM
+cursor.execute("SELECT ObjectTypeID FROM DPF_ObjectType WHERE UPPER(ObjectType) = 'PVSYSTEM'")
+pv_object_type_id = cursor.fetchone()[0]
+
+# Execute query to select ObjectTypeID for STORAGE
+cursor.execute("SELECT ObjectTypeID FROM DPF_ObjectType WHERE UPPER(ObjectType) = 'STORAGE'")
+storage_object_type_id = cursor.fetchone()[0]
+
+# Delete records from OPF_Output_DER
+cursor.execute("DELETE FROM OPF_Output_DER WHERE OptionID = ? AND ExecutionTypeID = ?", (option_id, execution_type_id))
+conn.commit()
+
+# Insert records into NodeLevelData
+cursor.execute("INSERT INTO NodeLevelData (OptionID, SubstationID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, pAdjustAggregation, MeterName, PhaseID, ElementTypeID, ElementType, AssociatedDERName, ScheduledDERName, ScheduleDERValue) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+               (option_id, substation_id, feeder_id, execution_type_id, time_resolution_id, interval, node_name, p_adjust_aggregation, meter_name, phase_id, element_type_id, element_type, associated_der_name, scheduled_der_name, schedule_der_value))
+conn.commit()
+
+# Logic to make absolute value for charging
+cursor.execute("SELECT *, CASE WHEN ElementTypeID = ? AND ScheduleDERValue < 0 THEN ABS(pAdjustAggregation) ELSE pAdjustAggregation END AS ABSpAdjustAggregation, CASE WHEN ElementTypeID = ? AND ScheduleDERValue < 0 THEN ABS(ScheduleDERValue) ELSE ScheduleDERValue END AS ABSScheduleDERValue, CASE WHEN ElementTypeID = ? AND ScheduleDERValue < 0 THEN 1 ELSE 0 END AS IsBatteryCharge INTO #Result FROM NodeLevelData WHERE ScheduledDERName IS NOT NULL",
+               (storage_object_type_id, storage_object_type_id, storage_object_type_id))
+conn.commit()
+
+# Calculate adjusted KW transformer and total schedule transformer
+cursor.execute("SELECT *, ABSpAdjustAggregation AS AdjustedKWTransformer, SUM(ABSScheduleDERValue) OVER (PARTITION BY OptionID, SubstationID, FeederID, Interval, NodeName, ElementTypeID, PhaseID) AS TotalScheduleTransformer INTO #TotalScheduledTable FROM #Result")
+conn.commit()
+
+# Calculate adjustment coefficient
+cursor.execute("SELECT *, ABSScheduleDERValue / NULLIF(TotalScheduleTransformer, 0) AS AdjustmentCoefficient INTO #AdjustmentCoefficient FROM #TotalScheduledTable")
+conn.commit()
+
+# Calculate adjusted KW DER
+cursor.execute("SELECT *, AdjustmentCoefficient * ABSpAdjustAggregation AS AdjustedKWDER INTO #Final FROM #AdjustmentCoefficient")
+conn.commit()
+
+# Update adjusted KW DER for charging
+cursor.execute("UPDATE #Final SET AdjustedKWDER = CASE WHEN IsBatteryCharge = 1 THEN AdjustedKWDER * -1 ELSE AdjustedKWDER END")
+conn.commit()
+
+# Insert records into OPF_Output_DER
+cursor.execute("INSERT INTO OPF_Output_DER (OptionID, SubstationID, ExecutionSourceID, OPFObjectiveID, DERScheduleMessageID, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, MeterName, PhaseID, ObjectTypeID, DERName, kW) SELECT OptionID, SubstationID, ?, ?, ?, FeederID, ExecutionTypeID, TimeResolutionID, Interval, NodeName, MeterName, PhaseID, ElementTypeID, ScheduledDERName, AdjustedKWDER FROM #Final",
+               (execution_source_id, opf_objective_id, derschedule_message_id))
+conn.commit()
+
+# Drop temporary tables
+cursor.execute("DROP TABLE #Result")
+cursor.execute("DROP TABLE #TotalScheduledTable")
+cursor.execute("DROP TABLE #AdjustmentCoefficient")
+cursor.execute("DROP TABLE #Final")
+conn.commit()
+
+# Close the connection
+conn.close()
+
+This code performs the following operations:
+
+Inserts records into NodeLevelData.Applies logic to make the absolute value for charging and inserts the result into #Result.Calculates adjusted KW transformer and total schedule transformer, and inserts the result into #TotalScheduledTable.Calculates adjustment coefficient and inserts the result into #AdjustmentCoefficient.Calculates adjusted KW DER and inserts the result into #Final.Updates adjusted KW DER for charging in #Final.Inserts records into OPF_Output_DER.Drops temporary tables #Result, #TotalScheduledTable, #AdjustmentCoefficient, and #Final.
