@@ -376,9 +376,7 @@ conn.execute(delete_query)
 # Close the connection
 conn.close()
 
-							 THEN AdjustedKWDER * -1
-							 ELSE AdjustedKWDER 
-							 END
+						
 
 	
 Input Tables and Columns:
