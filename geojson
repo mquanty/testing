@@ -1,0 +1,118 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System;
+using System.Collections.Generic;
+
+public class GeoJsonFeature
+{
+    public string Type { get; set; }
+
+    [JsonConverter(typeof(GeoJsonGeometryConverter))]
+    public GeoJsonGeometry Geometry { get; set; }
+    public object Properties { get; set; }
+}
+
+[JsonConverter(typeof(GeoJsonGeometryConverter))]
+public class GeoJsonGeometry
+{
+    public string Type { get; set; }
+    public dynamic Coordinates { get; set; }
+}
+
+public class GeoJsonGeometryConverter : JsonConverter
+{
+    public override bool CanConvert(Type objectType)
+    {
+        return objectType == typeof(GeoJsonGeometry);
+    }
+
+    public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+    {
+        JObject obj = JObject.Load(reader);
+
+        GeoJsonGeometry geometry = new GeoJsonGeometry
+        {
+            Type = (string)obj["Type"],
+            Coordinates = GetCoordinates(obj["Coordinates"])
+        };
+
+        return geometry;
+    }
+
+    public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+    {
+        throw new NotImplementedException();
+    }
+
+    private dynamic GetCoordinates(JToken token)
+    {
+        if (token.Type == JTokenType.Array && token.First.Type == JTokenType.Array)
+        {
+            // If it's a list of lists, convert to List<List<double>>
+            return token.ToObject<List<List<double>>>();
+        }
+        else
+        {
+            // If it's a list of single items, convert to List<double>
+            return token.ToObject<List<double>>();
+        }
+    }
+}
+
+class Program
+{
+    static void Main(string[] args)
+    {
+        string geoJsonString = @"[
+            {
+                ""Type"": ""other"",
+                ""Geometry"": {
+                    ""Type"": ""Point"",
+                    ""Coordinates"": [1, 2]
+                }
+            },
+            {
+                ""Type"": ""line"",
+                ""Geometry"": {
+                    ""Type"": ""LineString"",
+                    ""Coordinates"": [
+                        [1, 2],
+                        [3, 4],
+                        [5.6, 3.5]
+                    ]
+                }
+            }
+        ]";
+
+        // Deserialize GeoJSON array
+        List<GeoJsonFeature> features = JsonConvert.DeserializeObject<List<GeoJsonFeature>>(geoJsonString);
+
+        // Iterate through each feature
+        foreach (var feature in features)
+        {
+            Console.WriteLine($"Type: {feature.Type}");
+
+            if (feature.Geometry.Type == "LineString")
+            {
+                Console.WriteLine("Type: LineString");
+                foreach (var point in feature.Geometry.Coordinates)
+                {
+                    double longitude = point[0];
+                    double latitude = point[1];
+                    Console.WriteLine($"Longitude: {longitude}, Latitude: {latitude}");
+                }
+            }
+            else if (feature.Geometry.Type == "Point")
+            {
+                Console.WriteLine("Type: Point");
+                double longitude = feature.Geometry.Coordinates[0];
+                double latitude = feature.Geometry.Coordinates[1];
+                Console.WriteLine($"Longitude: {longitude}, Latitude: {latitude}");
+            }
+            else
+            {
+                // Handle other types if needed
+            }
+        }
+    }
+}
