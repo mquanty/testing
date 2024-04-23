@@ -18,3 +18,146 @@
 		"y": -10000
 	},
 }
+
+
+
+
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System;
+using System.Collections.Generic;
+
+public class SubPlot
+{
+    public int? X { get; set; }
+    public int? Y { get; set; }
+}
+
+public class SubPlotConverter : JsonConverter
+{
+    public override bool CanConvert(Type objectType)
+    {
+        return objectType == typeof(SubPlot) || objectType == typeof(List<SubPlot>);
+    }
+
+    public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+    {
+        if (reader.TokenType == JsonToken.StartArray)
+        {
+            // If it's an array of subplots
+            JArray array = JArray.Load(reader);
+            List<SubPlot> subPlots = new List<SubPlot>();
+            foreach (JObject item in array)
+            {
+                SubPlot subPlot = new SubPlot
+                {
+                    X = (int?)item["x"],
+                    Y = (int?)item["y"]
+                };
+                subPlots.Add(subPlot);
+            }
+            return subPlots;
+        }
+        else if (reader.TokenType == JsonToken.StartObject)
+        {
+            // If it's a single subplot object
+            JObject obj = JObject.Load(reader);
+            SubPlot subPlot = new SubPlot
+            {
+                X = (int?)obj["x"],
+                Y = (int?)obj["y"]
+            };
+            return subPlot;
+        }
+        else
+        {
+            throw new JsonException("Unexpected token type.");
+        }
+    }
+
+    public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+    {
+        if (value is List<SubPlot>)
+        {
+            // Write as an array of subplots
+            writer.WriteStartArray();
+            foreach (SubPlot subPlot in (List<SubPlot>)value)
+            {
+                writer.WriteStartObject();
+                writer.WritePropertyName("x");
+                writer.WriteValue(subPlot.X);
+                writer.WritePropertyName("y");
+                writer.WriteValue(subPlot.Y);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+        }
+        else if (value is SubPlot)
+        {
+            // Write as a single subplot object
+            SubPlot subPlot = (SubPlot)value;
+            writer.WriteStartObject();
+            writer.WritePropertyName("x");
+            writer.WriteValue(subPlot.X);
+            writer.WritePropertyName("y");
+            writer.WriteValue(subPlot.Y);
+            writer.WriteEndObject();
+        }
+        else
+        {
+            throw new JsonException("Unexpected value type.");
+        }
+    }
+}
+
+class Program
+{
+    static void Main(string[] args)
+    {
+        string jsonString = @"
+        {
+            ""sub_plot"": [
+                {
+                    ""x"": 19640,
+                    ""y"": -16180
+                },
+                {
+                    ""x"": 21840,
+                    ""y"": -16180
+                },
+                {
+                    ""x"": null,
+                    ""y"": null
+                }
+            ],
+            ""sub_plot"": {
+                ""x"": 31360,
+                ""y"": -10000
+            }
+        }";
+
+        var settings = new JsonSerializerSettings
+        {
+            Converters = { new SubPlotConverter() }
+        };
+
+        var data = JsonConvert.DeserializeObject<Dictionary<string, object>>(jsonString, settings);
+
+        foreach (var pair in data)
+        {
+            Console.WriteLine(pair.Key);
+            if (pair.Value is List<SubPlot>)
+            {
+                foreach (var subPlot in (List<SubPlot>)pair.Value)
+                {
+                    Console.WriteLine($"x: {subPlot.X}, y: {subPlot.Y}");
+                }
+            }
+            else if (pair.Value is SubPlot)
+            {
+                var subPlot = (SubPlot)pair.Value;
+                Console.WriteLine($"x: {subPlot.X}, y: {subPlot.Y}");
+            }
+        }
+    }
+}
