@@ -44,3 +44,73 @@ Also i need to find all the assets connected to a single node.
 use for loop or span type, and use efficient design pattern to handle this. and provide the code in c#.
 all the 3 type of class like switche, line and motor can inherit from a parent class like Asset which has id, type and node list as attributes.
 use parent constructor initialize so that it should automatically establish connected network while doing deserialize only.
+
+
+
+
+
+
+using Newtonsoft.Json;
+using System.Collections.Generic;
+using System.Linq;
+
+public abstract class Asset
+{
+    public string asset_id { get; set; }
+    public string asset_type { get; set; }
+    public List<string> node_list { get; set; }
+    public List<Asset> connectedAssets { get; set; }
+
+    protected Asset()
+    {
+        connectedAssets = new List<Asset>();
+    }
+
+    public void ConnectAsset(Asset asset)
+    {
+        connectedAssets.Add(asset);
+        asset.connectedAssets.Add(this);
+    }
+
+    public void ConnectAssetsBasedOnNodeList(IEnumerable<Asset> allAssets)
+    {
+        foreach (var node in node_list.Where(n => n != null))
+        {
+            foreach (var otherAsset in allAssets.Where(a => a != this && a.node_list.Contains(node)))
+            {
+                ConnectAsset(otherAsset);
+            }
+        }
+    }
+
+    public static List<Asset> GetConnectedAssetsFromNodeId(string assetId, string nodeId, IEnumerable<Asset> allAssets)
+    {
+        var asset = allAssets.FirstOrDefault(a => a.asset_id == assetId);
+        if (asset == null)
+            return new List<Asset>();
+
+        var nodeIndex = asset.node_list.IndexOf(nodeId);
+        if (nodeIndex == -1)
+            return new List<Asset>();
+
+        var connectedAssets = new List<Asset>();
+        var startingAsset = asset;
+        var currentNode = nodeId;
+
+        while (true)
+        {
+            var nextAsset = startingAsset.connectedAssets.FirstOrDefault(a => a.node_list.Contains(currentNode) && a != startingAsset);
+            if (nextAsset == null)
+                break;
+
+            connectedAssets.Add(nextAsset);
+            var nextNodeIndex = nextAsset.node_list.IndexOf(currentNode) == 0 ? 1 : 0;
+            currentNode = nextAsset.node_list[nextNodeIndex];
+            startingAsset = nextAsset;
+        }
+
+        return connectedAssets;
+    }
+}
+
+// Other classes (Switch, Line, Motor, NetworkData) remain the same
