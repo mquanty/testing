@@ -114,3 +114,120 @@ public abstract class Asset
 }
 
 // Other classes (Switch, Line, Motor, NetworkData) remain the same
+
+
+
+
+
+
+
+
+
+
+
+
+
+using Newtonsoft.Json;
+using System.Collections.Generic;
+using System.Linq;
+
+public abstract class Asset
+{
+    public string asset_id { get; set; }
+    public string asset_type { get; set; }
+    public List<string> node_list { get; set; }
+    public List<Asset> connectedAssets { get; set; }
+
+    protected Asset()
+    {
+        connectedAssets = new List<Asset>();
+    }
+
+    public void ConnectAsset(Asset asset)
+    {
+        connectedAssets.Add(asset);
+        asset.connectedAssets.Add(this);
+    }
+
+    public static Dictionary<string, List<Asset>> BuildNodeAssetsMap(IEnumerable<Asset> allAssets)
+    {
+        var nodeAssetsMap = new Dictionary<string, List<Asset>>();
+
+        foreach (var asset in allAssets)
+        {
+            foreach (var node in asset.node_list.Where(n => n != null))
+            {
+                if (!nodeAssetsMap.ContainsKey(node))
+                    nodeAssetsMap[node] = new List<Asset>();
+
+                nodeAssetsMap[node].Add(asset);
+            }
+        }
+
+        return nodeAssetsMap;
+    }
+
+    public void ConnectAssetsBasedOnNodeList(Dictionary<string, List<Asset>> nodeAssetsMap)
+    {
+        foreach (var node in node_list.Where(n => n != null))
+        {
+            if (nodeAssetsMap.TryGetValue(node, out var connectedAssets))
+            {
+                foreach (var otherAsset in connectedAssets.Where(a => a != this))
+                {
+                    ConnectAsset(otherAsset);
+                }
+            }
+        }
+    }
+
+    public static List<Asset> GetConnectedAssetsFromNodeId(string assetId, string nodeId, IEnumerable<Asset> allAssets)
+    {
+        var asset = allAssets.FirstOrDefault(a => a.asset_id == assetId);
+        if (asset == null)
+            return new List<Asset>();
+
+        var nodeIndex = asset.node_list.IndexOf(nodeId);
+        if (nodeIndex == -1)
+            return new List<Asset>();
+
+        var connectedAssets = new List<Asset>();
+        var startingAsset = asset;
+        var currentNode = nodeId;
+
+        while (true)
+        {
+            var nextAsset = startingAsset.connectedAssets.FirstOrDefault(a => a.node_list.Contains(currentNode) && a != startingAsset);
+            if (nextAsset == null)
+                break;
+
+            connectedAssets.Add(nextAsset);
+            var nextNodeIndex = nextAsset.node_list.IndexOf(currentNode) == 0 ? 1 : 0;
+            currentNode = nextAsset.node_list[nextNodeIndex];
+            startingAsset = nextAsset;
+        }
+
+        return connectedAssets;
+    }
+}
+
+// Other classes (Switch, Line, Motor, NetworkData) remain the same
+string json = @"{...}"; // Replace with your JSON data
+
+NetworkData networkData = JsonConvert.DeserializeObject<NetworkData>(json);
+
+var allAssets = networkData.GetAllAssets();
+
+// Build the node-assets map
+var nodeAssetsMap = Asset.BuildNodeAssetsMap(allAssets);
+
+// Connect assets based on node_list
+foreach (var asset in allAssets)
+{
+    asset.ConnectAssetsBasedOnNodeList(nodeAssetsMap);
+}
+
+// Find all connected assets from a specific asset ID and node ID
+string assetId = "switch1";
+string nodeId = "node1";
+var connectedAssets = Asset.GetConnectedAssetsFromNodeId(assetId, nodeId, allAssets);
