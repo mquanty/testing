@@ -1,0 +1,48 @@
+the following classes are a model classes for deserializing a json file.
+using J = Newtonsoft.Json.JsonPropertyAttribute;
+
+	public enum AssetType
+    {
+        CAPACITOR,
+        CABLE,
+	}
+    public abstract class Asset
+    {
+        [J("asset_id")] public string AssetId { get; set; }
+        [J("asset_type")] public AssetType AssetType { get; set; }
+		public AssetSpec AssetSpec { get; set; }
+	}
+    public partial class Assets
+    {
+        [J("capacitors")] public List<Capacitor> Capacitors { get; set; }
+		[J("cables")] public List<Cable> Cables { get; set; }
+	}
+	public partial class Capacitor : Asset
+    {
+	//Assettype is CAPACITOR here
+        [J("capacitor_spec_id")] public string CapacitorSpecId { get; set; }
+	}
+	public partial class Cable : Asset
+    {
+	//Assettype is CABLE here
+        [J("cable_spec_id")] public string CableSpecId { get; set; }
+	}
+    public partial class AssetSpec
+    {
+        [J("additional_info")] public AssetSpecAdditionalInfo AdditionalInfo { get; set; }
+    }
+	public partial class CableSpec : AssetSpec
+    {
+        [J("cable_spec_id")] public string CableSpecId { get; set; }
+	}
+	public partial class CapacitorSpec : AssetSpec
+    {
+        [J("capacitor_spec_id")] public string CapacitorSpecId { get; set; }
+	}
+	
+THE Capacitor class CapacitorSpecId will match with a CapacitorSpec class's CapacitorSpecId
+In these cases the CapacitorSpec object should be linked to Capacitor object's AssetSepc attribute.
+
+similarly THE Cable class CableSpecId will match with a CableSpec class's CableSpecId
+In these cases the CableSpec object should be linked to Cable object's AssetSepc attribute.
+How to link the spec objects to asset classes. please show me the code.
