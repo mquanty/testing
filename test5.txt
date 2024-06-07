@@ -1,0 +1,47 @@
+        [J("asset_specs")] public AssetSpecs AssetSpecs { get; set; }
+        //public Dictionary<string, List<AssetSpec>> AssetSpecs { get; set; }
+
+    public partial class AssetSpecs
+    {
+        [JsonProperty("battery_specs")]
+        public List<BatterySpec> BatterySpecs { get; set; }
+
+        [JsonProperty("cable_specs")]
+        public List<CableSpec> CableSpecs { get; set; }
+
+        [JsonProperty("capacitor_specs")]
+        public List<CapacitorSpec> CapacitorSpecs { get; set; }
+
+        [JsonProperty("conductor_specs")]
+        public List<ConductorSpec> ConductorSpecs { get; set; }
+
+        [JsonProperty("conductor_impedance_specs")]
+        public List<ConductorImpedanceSpec> ConductorImpedanceSpecs { get; set; }
+
+        [JsonProperty("inverter_specs")]
+        public List<object> InverterSpecs { get; set; }
+
+        [JsonProperty("load_specs")]
+        public List<LoadSpec> LoadSpecs { get; set; }
+
+        [JsonProperty("ltc_specs")]
+        public List<LtcSpec> LtcSpecs { get; set; }
+
+        [JsonProperty("regulator_specs")]
+        public List<RegulatorSpec> RegulatorSpecs { get; set; }
+
+        [JsonProperty("solar_pv_specs")]
+        public List<SolarPVSpec> SolarPVSpecs { get; set; }
+
+        [JsonProperty("source_specs")]
+        public List<SourceSpec> SourceSpecs { get; set; }
+
+        [JsonProperty("switch_specs")]
+        public List<SwitchSpec> SwitchSpecs { get; set; }
+
+        [JsonProperty("transformer_specs")]
+        public List<TransformerSpec> TransformerSpecs { get; set; }
+
+        [JsonProperty("wire_specs")]
+        public List<WireSpec> WireSpecs { get; set; }
+    }
