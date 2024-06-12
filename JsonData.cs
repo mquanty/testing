@@ -1,6 +1,9 @@
 ﻿using J = Newtonsoft.Json.JsonPropertyAttribute;
 using Newtonsoft.Json;
 using static GisImporter2.Model.ElectricGridModel;
+using System.Xml.Linq;
+using System.Diagnostics;
+using System.Linq;
 
 namespace GisImporter2.Model
 {
@@ -8,7 +11,7 @@ namespace GisImporter2.Model
     {
         [J("additional_info")] public ElectricGridModelAdditionalInfo AdditionalInfo { get; set; }
         [J("asset_service_states")] public List<AssetServiceState> AssetServiceStates { get; set; }
-        [J("asset_specs")] public Dictionary<string, List<AssetSpec>> AssetSpecs { get; set; }
+        [J("asset_specs")] public AssetSpecs AssetSpecs { get; set; }
         [J("assets")] public Assets Assets { get; set; }
         [J("base_kvs")] public List<double> BaseKvs { get; set; }
         [J("faults")] public List<object> Faults { get; set; }
@@ -30,7 +33,6 @@ namespace GisImporter2.Model
         public void AssociateGeoJsonWithAssets()
         {
             geoJsonDict = GeoCoordinates?.ToDictionary(gc => gc.ObjectId, gc => gc.Geojson);
-            var allAssets = Assets.GetAllAssets();
             foreach (var asset in allAssets)
             {
                 if (geoJsonDict.TryGetValue(asset.AssetId, out var geoJson))
@@ -42,54 +44,264 @@ namespace GisImporter2.Model
 
         public void AssociateAssetsWithNodes()
         {
-            var allAssets = Assets.GetAllAssets();
             nodeAssetsMap = Asset.BuildNodeAssetsMap(allAssets);
             Asset.AssignNodeReferences(nodeAssetsMap, allAssets);
         }
 
-        public enum traceAlgo
+        //should it be hash or just list
+        public HashSet<Asset> allAssets => Assets.GetAllAssets().ToHashSet();
+        public Dictionary<string, Asset> allAssetsDict => allAssets.ToDictionary(a => a.AssetId);
+
+        //clears all parent relations, feedernames, and fromside node and to side node information
+        public void ResetNetwork()
         {
-            BFS, DFS
+            //AssociateAssetsWithNodes();
+            foreach (var asset in allAssets)
+            {
+                asset.Parent = null;
+                asset.FeederName = null;
+
+                asset.NodeSideFrom = null;
+                asset.NodeSideTo = null;
+
+                asset.IsFeederHead = false;
+            }
         }
 
-        public List<Asset> TraceFeeder(string startingDeviceName, string startingNodeName = null, string feederName = null, traceAlgo algo = traceAlgo.BFS)
+        public List<Asset> TraceNetworkComplete(bool writetofile = false)
         {
-            var allAssets = Assets.GetAllAssets();
+            var allTracedAssets = new List<Asset>();
+            Stopwatch sss = Stopwatch.StartNew();
+            this.AllocateStates();
+            //this.AssociateAssetsWithNodes();
+            this.ResetNetwork();
+            //LOGIC TO FIND FEEDER HEAD ASSETS
+            //start from source and trace all the way down until we find any asset where the cicruitID is not null. i.e., the feeder Head Breakers.
+            //var sourceAsset = allAssets.FirstOrDefault(x => x.AssetType == AssetType.VOLTAGE_SOURCE);
+            var sourceAsset = Assets.Sources.First();
+            var allAssetsFromSource = this.TraceFeeder(sourceAsset).ToList();
+            var allFeederHeads = allAssetsFromSource.Where(x => x.IsFeederHead).ToList();
+            //LOGIC TO FIND ALL FEEDER ASSETS
+            //start from each feederhead and the node towards the network, normally we can find it as tonode and trace all the way down.
+            var allFeederAssets = new List<List<Asset>>();
+            foreach (var eachFeederHead in allFeederHeads)
+            {
+                eachFeederHead.FeederName = null; //reset the feedername from the previously assigned sourcename to null. it will get reassigned during tracing.
+                //we may not necessarily return the list, as already inside egm.allAssets the changes are reflected, and we can get all the tracing details of all assets
+                var currentTraceAssets = this.TraceFeeder(eachFeederHead, eachFeederHead.NodeSideTo);
+                allFeederAssets.Add(currentTraceAssets);
+            }
+            sss.Stop();
+            allTracedAssets = allAssetsFromSource.Except(allFeederHeads).Concat(allFeederAssets.SelectMany(x => x)).ToList();
+            Console.WriteLine($"Tracing complete for {allTracedAssets.Count()} assets in {sss.ElapsedMilliseconds} ms.");
+            if (writetofile)
+            {
+                using StreamWriter writer = new StreamWriter($"DUKE_Feeder_Tracing_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid()}.txt");
+                foreach (var asset in allTracedAssets)
+                    writer.WriteLine($"Feeder:{asset?.FeederName ?? "null"} || Parent:{asset?.Parent?.AssetId ?? "null"} || FromNode:{asset?.NodeSideFrom?.Name ?? "null"} => {asset.AssetType}:{asset.AssetId} => ToNode:{asset?.NodeSideTo?.Name ?? "null"}");
+            }
+            return allTracedAssets;
+        }
 
+        //Breadth-First-Search Approach for tracing
+        public List<Asset> TraceFeeder(Asset startingAsset, Node startingNode = null, string feederName = null)
+        {
+            Stopwatch st = new Stopwatch();
+            st.Start();
+
+            //if nodename not provided then take the first node as the starting node name
+            if (string.IsNullOrEmpty(startingNode?.Name))
+                startingNode = startingAsset?.NodeObject1 ?? startingAsset?.NodeObject2; //NodeList?.FirstOrDefault();
+
+            bool IsSubstationTracing = false;
+
+            //if no feedername is provided and the stataring asset's circuitid is null, most probably its a device in the substation, and we intend to find the feederheads only.
             if (string.IsNullOrEmpty(feederName))
+                if (startingAsset.Groupings.CircuitId == null || startingAsset.AssetType == AssetType.VOLTAGE_SOURCE)
+                {
+                    //if the startingdevice's circuitid is null, find out the feederheads.
+                    feederName = startingAsset.AssetId;
+                    IsSubstationTracing = true;
+                }
+                else
+                {
+                    //if feedername not mentioned, take the one which is the circuitid of the starting device.
+                    feederName = startingAsset.Groupings.CircuitId;
+                }
+
+            var feederAssets = new List<Asset>();
+            //feederAssets.Add(startingAsset);   //add the first device to the list
+            startingAsset.NodeSideTo = startingNode; //make the startingnode as to side node of the device
+
+            Queue<(Asset asset, Node node, Asset parent)> queue = new Queue<(Asset, Node, Asset)>();
+            HashSet<string> visitedNodes = new HashSet<string>();
+
+            queue.Enqueue((startingAsset, startingNode, null));
+            visitedNodes.Add(startingNode.Name);
+            startingNode.FeederName = feederName;
+
+            while (queue.Count > 0)
             {
-                var startingAsset = allAssets.FirstOrDefault(x => x.AssetId == startingDeviceName);
-                feederName = startingAsset?.Groupings?.CircuitId ?? Guid.NewGuid().ToString();
+                var (currentAsset, currentNode, parentAsset) = queue.Dequeue();
+
+                if (string.IsNullOrEmpty(currentAsset.FeederName))
+                {
+                    currentAsset.FeederName = feederName;
+                    currentAsset.Parent ??= parentAsset; //if the parent is null, set the parent, case when starting device has existing parent
+                    feederAssets.Add(currentAsset);
+                }
+                // Continue to the next iteration if the FeederName is already set, never enters the else condition
+                else continue;
+
+                foreach (var connectedAsset in currentNode.ConnectedAssets)
+                {
+                    if (connectedAsset == currentAsset) continue;
+
+                    if (connectedAsset.IsTraced)
+                    {
+                        if (connectedAsset.FeederName == feederName)
+                            //the asset is already been traced but again appeared through a closed circuit or mesh circuit
+                            continue;
+                        else
+                            //set from another feeder
+                            continue;
+                    }
+
+                    var nextNode = connectedAsset.NodeList.First() == currentNode.Name ?
+                        connectedAsset.NodeObject2 : connectedAsset.NodeObject1;
+
+                    // Set from-side and to-side nodes
+                    connectedAsset.NodeSideFrom = currentNode;
+                    connectedAsset.NodeSideTo = nextNode;
+
+                    //stop if the switch is open or
+                    //stop if the IsSubstationTracing is true and the device's circuitid is not null, mostly for the breakers which acts as feederheads where the circuitid is not null will have this.
+                    if (connectedAsset.IsOpenSwitch() ||
+                        (IsSubstationTracing && connectedAsset.Groupings.CircuitId != null))
+                    {
+                        if (string.IsNullOrEmpty(connectedAsset.FeederName))
+                        {
+                            connectedAsset.FeederName = feederName;
+                            connectedAsset.Parent = currentAsset;
+                            feederAssets.Add(connectedAsset);
+                        }
+
+                        //if the tracing is for substation assets, and its circuitid is have some value, only occures for the feederhead breakers.
+                        if (IsSubstationTracing && connectedAsset.Groupings.CircuitId != null)
+                            connectedAsset.IsFeederHead = true;
+
+                        currentNode.FeederName = feederName;
+                        continue;
+                    }
+
+                    if (nextNode != null)
+                    {
+                        //if the node is visited for first time, just add it to the visited list and set feedername, and add the asset to queue
+                        if (!visitedNodes.Contains(nextNode.Name))
+                        {
+                            visitedNodes.Add(nextNode.Name);
+                            nextNode.FeederName = feederName;
+                            queue.Enqueue((connectedAsset, nextNode, currentAsset));
+                        }
+                        //if node is already visited but the feedername is empty for the asset, the case when last asset for closed circuit or mesh connections.
+                        else if (!connectedAsset.IsTraced) //string.IsNullOrEmpty(connectedAsset.FeederName))
+                        {
+                            connectedAsset.FeederName = feederName;
+                            connectedAsset.Parent = currentAsset;
+                            feederAssets.Add(connectedAsset);
+                            //queue.Enqueue((connectedAsset, nextNode, currentAsset));
+                        }
+                    }
+                    //if the next node is not there, and its a dead end, the case for single ended devices like load, capacitor etc.
+                    else if (nextNode == null)
+                    {
+                        if (!feederAssets.Contains(connectedAsset))
+                        {
+                            connectedAsset.FeederName = feederName;
+                            connectedAsset.Parent = currentAsset;
+                            feederAssets.Add(connectedAsset);
+                        }
+                    }
+                }
             }
 
-            if (string.IsNullOrEmpty(startingNodeName))
+            //UpdateAssets(feederAssets);
+
+            st.Stop();
+            Console.WriteLine($"Feeder tracing complete in total time {st.ElapsedMilliseconds} ms. " +
+                              $"Asset:{startingAsset.AssetType}_{startingAsset.AssetId}, Node:{startingNode.Name}, Count:{feederAssets?.Count()} Feeder:{feederName}");
+            return feederAssets;
+        }
+
+        // Method to trace up the hierarchy
+        public List<Asset> TraceUp(string assetId, bool tillFeederHeadOnly = true)
+        {
+            var result = new List<Asset>();
+            if (!allAssetsDict.ContainsKey(assetId)) return result;
+
+            var currentAsset = allAssetsDict[assetId];
+            result.Add(currentAsset);
+
+            while (currentAsset.Parent != null)
             {
-                var startingAsset = allAssets.FirstOrDefault(x => x.AssetId == startingDeviceName);
-                startingNodeName = startingAsset?.NodeList?.FirstOrDefault() ?? string.Empty;
-                if (string.IsNullOrEmpty(startingNodeName))
-                    return null;
+                if (tillFeederHeadOnly && currentAsset.IsFeederHead)
+                    break;
+                currentAsset = currentAsset.Parent;
+                result.Add(currentAsset);
             }
 
-            nodeAssetsMap = Asset.BuildNodeAssetsMap(allAssets);
-            Asset.AssignNodeReferences(nodeAssetsMap, allAssets);
-
-            FeederTracer tracer = new FeederTracer(nodeAssetsMap, allAssets.ToDictionary(a => a.AssetId));
-            var result = tracer.TraceFeeder(startingDeviceName, startingNodeName, feederName, algo);
             return result;
         }
 
-        public void ResetParentDevicesAndFeederNames()
+        public List<Asset> TraceDn(string assetId)
         {
-            var allAssets = Assets.GetAllAssets();
-            nodeAssetsMap = Asset.BuildNodeAssetsMap(allAssets);
-            Asset.AssignNodeReferences(nodeAssetsMap, allAssets);
+            var result = new List<Asset>();
+            if (!allAssetsDict.ContainsKey(assetId)) return result;
 
-            foreach (var asset in allAssets)
+            result.Add(allAssetsDict[assetId]); //asset in the argument
+
+            var queue = new Queue<Asset>();
+            var visitedAssets = new HashSet<string>();
+
+            queue.Enqueue(allAssetsDict[assetId]);
+            visitedAssets.Add(assetId);
+
+            while (queue.Count > 0)
             {
-                asset.ParentName = null;
-                asset.FeederName = null;
+                var currentAsset = queue.Dequeue();
+                if (currentAsset.NodeSideTo != null)
+                    foreach (var connectedAsset in currentAsset.NodeSideTo?.ConnectedAssets)
+                    {
+                        // Check if the connected asset is a child and has not been visited
+                        if (
+                            connectedAsset.Parent?.AssetId == currentAsset.AssetId
+                            //connectedAsset.NodeSideFrom?.Name == currentAsset.NodeSideTo?.Name
+                            && !visitedAssets.Contains(connectedAsset.AssetId))
+                        {
+                            result.Add(connectedAsset);
+                            queue.Enqueue(connectedAsset);
+                            visitedAssets.Add(connectedAsset.AssetId);
+                        }
+                    }
             }
+
+            return result;
         }
+
+        //private void UpdateAssets(List<Asset> tracedAssets)
+        //{
+        //    foreach (var tracedAsset in tracedAssets)
+        //    {
+        //        if (allAssetsDict.ContainsKey(tracedAsset.AssetId))
+        //        {
+        //            var existingAsset = allAssetsDict[tracedAsset.AssetId];
+        //            existingAsset.FeederName = tracedAsset.FeederName;
+        //            existingAsset.Parent = tracedAsset.Parent;
+        //            existingAsset.NodeSideFrom = tracedAsset.NodeSideFrom;
+        //            existingAsset.NodeSideTo = tracedAsset.NodeSideTo;
+        //        }
+        //    }
+        //}
 
         public void AllocateStates()
         {
@@ -114,7 +326,6 @@ namespace GisImporter2.Model
                     allstatedict[assetid] = null;
             }
 
-            var allAssets = Assets.GetAllAssets();
             foreach (var asset in allAssets)
             {
                 if (allstatedict.TryGetValue(asset.AssetId, out var switchstate))
@@ -122,6 +333,22 @@ namespace GisImporter2.Model
                     asset.SwitchStatus = switchstate;
                 }
             }
+        }
+
+        public void SwitchSimulateOpen(string switchID)
+        {
+            var myswitch = this.StateVariables.SwitchStates.FirstOrDefault(x => x.SwitchId == switchID);
+            if (myswitch != null)
+                foreach (var myswitchunitid in myswitch.SwitchStatusByUnits.Keys)
+                    myswitch.SwitchStatusByUnits[myswitchunitid] = "OPEN";
+        }
+
+        public void SwitchSimulateClose(string switchID)
+        {
+            var myswitch = this.StateVariables.SwitchStates.FirstOrDefault(x => x.SwitchId == switchID);
+            if (myswitch != null)
+                foreach (var myswitchunitid in myswitch.SwitchStatusByUnits.Keys)
+                    myswitch.SwitchStatusByUnits[myswitchunitid] = "CLOSED";
         }
     }
 
@@ -169,6 +396,51 @@ namespace GisImporter2.Model
         /// </summary>
         [J("additional_info")]
         public AssetSpecAdditionalInfo AdditionalInfo { get; set; }
+    }
+
+    public partial class AssetSpecs
+    {
+        [JsonProperty("battery_specs")]
+        public List<BatterySpec> BatterySpecs { get; set; }
+
+        [JsonProperty("cable_specs")]
+        public List<CableSpec> CableSpecs { get; set; }
+
+        [JsonProperty("capacitor_specs")]
+        public List<CapacitorSpec> CapacitorSpecs { get; set; }
+
+        [JsonProperty("conductor_specs")]
+        public List<ConductorSpec> ConductorSpecs { get; set; }
+
+        [JsonProperty("conductor_impedance_specs")]
+        public List<ConductorImpedanceSpec> ConductorImpedanceSpecs { get; set; }
+
+        [JsonProperty("inverter_specs")]
+        public List<object> InverterSpecs { get; set; }
+
+        [JsonProperty("load_specs")]
+        public List<LoadSpec> LoadSpecs { get; set; }
+
+        [JsonProperty("ltc_specs")]
+        public List<LtcSpec> LtcSpecs { get; set; }
+
+        [JsonProperty("regulator_specs")]
+        public List<RegulatorSpec> RegulatorSpecs { get; set; }
+
+        [JsonProperty("solar_pv_specs")]
+        public List<SolarPVSpec> SolarPVSpecs { get; set; }
+
+        [JsonProperty("source_specs")]
+        public List<SourceSpec> SourceSpecs { get; set; }
+
+        [JsonProperty("switch_specs")]
+        public List<SwitchSpec> SwitchSpecs { get; set; }
+
+        [JsonProperty("transformer_specs")]
+        public List<TransformerSpec> TransformerSpecs { get; set; }
+
+        [JsonProperty("wire_specs")]
+        public List<WireSpec> WireSpecs { get; set; }
     }
 
     public partial class AssetSpecAdditionalInfo
@@ -424,9 +696,11 @@ namespace GisImporter2.Model
     public abstract class Asset
     {
         public string FeederName { get; set; }
-        public string ParentName { get; set; }
-        public Node Node1 { get; set; }
-        public Node Node2 { get; set; }
+        public Asset Parent { get; set; }
+        public Node NodeObject1 { get; set; }
+        public Node NodeObject2 { get; set; }
+        public Node NodeSideFrom { get; set; }
+        public Node NodeSideTo { get; set; }
         public bool? SwitchStatus { get; set; } // Assume this is properly defined somewhere in your class
         public bool IsOpenSwitch()
         {
@@ -434,6 +708,22 @@ namespace GisImporter2.Model
                     AssetType == AssetType.FUSE || AssetType == AssetType.ELBOW ||
                     AssetType == AssetType.RECLOSER || AssetType == AssetType.SECTIONALIZER) && SwitchStatus == false;
         }
+        public bool IsFeederHead { get; set; }
+        public bool IsSingleNode => NodeList.Count() == 1;
+        public bool IsIsolated => ConnectedAssets.Count() == 0;
+        public bool IsTraced => this.Parent != null || !string.IsNullOrEmpty(this.FeederName);
+        //public bool IsTracedAbnormal => this.Parent?.NodeSideTo != this.NodeSideFrom;
+        //public bool IsInSubstation { get; set; }
+        // used for HashSet Optimization
+        public override bool Equals(object? obj)
+        {
+            if (obj == null || GetType() != obj.GetType()) return false;
+            Asset other = (Asset)obj;
+            return AssetType == other.AssetType && AssetId == other.AssetId;
+        }
+        // used for HashSet Optimization
+        public override int GetHashCode() => HashCode.Combine(AssetType, AssetId);
+
 
         [J("asset_id")] public string AssetId { get; set; }
         [J("asset_type")] public AssetType AssetType { get; set; }
@@ -491,9 +781,9 @@ namespace GisImporter2.Model
             foreach (var asset in assets)
             {
                 if (asset.NodeList.Count > 0)
-                    asset.Node1 = nodeLookup.ContainsKey(asset.NodeList[0]) ? nodeLookup[asset.NodeList[0]] : null;
+                    asset.NodeObject1 = nodeLookup.ContainsKey(asset.NodeList[0]) ? nodeLookup[asset.NodeList[0]] : null;
                 if (asset.NodeList.Count > 1)
-                    asset.Node2 = nodeLookup.ContainsKey(asset.NodeList[1]) ? nodeLookup[asset.NodeList[1]] : null;
+                    asset.NodeObject2 = nodeLookup.ContainsKey(asset.NodeList[1]) ? nodeLookup[asset.NodeList[1]] : null;
             }
 
             foreach (var kvp in nodeAssetsMap)
@@ -503,7 +793,7 @@ namespace GisImporter2.Model
 
                 foreach (var asset in connectedAssets)
                 {
-                    if (asset.Node1 == node || asset.Node2 == node)
+                    if (asset.NodeObject1 == node || asset.NodeObject2 == node)
                         node.ConnectedAssets.Add(asset);
                 }
             }
@@ -513,11 +803,11 @@ namespace GisImporter2.Model
             {
                 asset.ConnectedAssets.Clear(); // Clear existing connected assets
 
-                foreach (var connectedAsset in asset.Node1?.ConnectedAssets ?? Enumerable.Empty<Asset>())
+                foreach (var connectedAsset in asset.NodeObject1?.ConnectedAssets ?? Enumerable.Empty<Asset>())
                     if (connectedAsset != asset)
                         asset.ConnectedAssets.Add(connectedAsset);
 
-                foreach (var connectedAsset in asset.Node2?.ConnectedAssets ?? Enumerable.Empty<Asset>())
+                foreach (var connectedAsset in asset.NodeObject2?.ConnectedAssets ?? Enumerable.Empty<Asset>())
                     if (connectedAsset != asset)
                         asset.ConnectedAssets.Add(connectedAsset);
             }
@@ -591,9 +881,10 @@ namespace GisImporter2.Model
         [J("underground_secondary_conductors")]
         public List<object> UndergroundSecondaryConductors { get; set; }
 
-        public IEnumerable<Asset> GetAllAssets()
+        internal IEnumerable<Asset> GetAllAssets()
         {
-            return Capacitors.Cast<Asset>()
+            return new List<Asset>()
+                    .Concat(Capacitors)
                     .Concat(CircuitBreakers)
                     .Concat(DistributedGenerators)
                     .Concat(Elbows)
@@ -609,8 +900,8 @@ namespace GisImporter2.Model
                     .Concat(Switches)
                     .Concat(Transformers)
                     .Concat(UndergroundPrimaryConductors)
-                //.Concat(UndergroundSecondaryConductors)
-                ;
+                    //.Concat(UndergroundSecondaryConductors)
+                    ;
         }
     }
 
@@ -1220,120 +1511,4 @@ namespace GisImporter2.Model
         }
     }
 
-    public class FeederTracer
-    {
-        private readonly Dictionary<Node, List<Asset>> _nodeAssetsMap;
-        private readonly Dictionary<string, Asset> _assets;
-
-        public FeederTracer(Dictionary<Node, List<Asset>> nodeAssetsMap, Dictionary<string, Asset> assets)
-        {
-            _nodeAssetsMap = nodeAssetsMap;
-            _assets = assets;
-        }
-
-        public List<Asset> TraceFeeder(string startingDeviceName, string startingNodeName, string feederName, traceAlgo algo = traceAlgo.BFS)
-        {
-            return (algo == traceAlgo.BFS)
-                ? TraceFeederBFS(startingDeviceName, startingNodeName, feederName)
-                : TraceFeederDFS(startingDeviceName, startingNodeName, feederName);
-        }
-
-        //USING DFS ALGORITHM
-        public List<Asset> TraceFeederDFS(string startingDeviceName, string startingNodeName, string feederName)
-        {
-            return null;
-        }
-
-        //USING BFS ALGORITHM
-        public List<Asset> TraceFeederBFS(string startingDeviceName, string startingNodeName, string feederName)
-        {
-            var feederAssets = new List<Asset>();
-
-            if (!_assets.ContainsKey(startingDeviceName)) return feederAssets;
-
-            var startingAsset = _assets[startingDeviceName];
-            var startingNode = _nodeAssetsMap.Keys.FirstOrDefault(n => n.Name == startingNodeName);
-
-            if (startingNode == null) return feederAssets;
-
-            Queue<(Asset asset, Node node, string parentName)> queue = new Queue<(Asset, Node, string)>();
-            HashSet<string> visitedNodes = new HashSet<string>();
-
-            queue.Enqueue((startingAsset, startingNode, null));
-            visitedNodes.Add(startingNode.Name);
-            startingNode.FeederName = feederName;
-
-            while (queue.Count > 0)
-            {
-                var (currentAsset, currentNode, parentName) = queue.Dequeue();
-
-                if (string.IsNullOrEmpty(currentAsset.FeederName))
-                {
-                    currentAsset.FeederName = feederName;
-                    currentAsset.ParentName = parentName;
-                    feederAssets.Add(currentAsset);
-                }
-
-                foreach (var connectedAsset in currentNode.ConnectedAssets)
-                {
-                    if (connectedAsset == currentAsset) continue;
-
-                    var nextNode = connectedAsset.NodeList.First() == currentNode.Name ? connectedAsset.Node2 : connectedAsset.Node1;
-
-                    if (connectedAsset.IsOpenSwitch())
-                    {
-                        if (string.IsNullOrEmpty(connectedAsset.FeederName))
-                        {
-                            connectedAsset.FeederName = feederName;
-                            connectedAsset.ParentName = currentAsset.AssetId;
-                            feederAssets.Add(connectedAsset);
-                        }
-
-                        currentNode.FeederName = feederName;
-                        continue;
-                    }
-
-                    if (nextNode != null)
-                    {
-                        if (!visitedNodes.Contains(nextNode.Name))
-                        {
-                            visitedNodes.Add(nextNode.Name);
-                            nextNode.FeederName = feederName;
-                            queue.Enqueue((connectedAsset, nextNode, currentAsset.AssetId));
-                        }
-                        else if (string.IsNullOrEmpty(connectedAsset.FeederName))
-                        {
-                            connectedAsset.FeederName = feederName;
-                            connectedAsset.ParentName = currentAsset.AssetId;
-                            feederAssets.Add(connectedAsset);
-                            queue.Enqueue((connectedAsset, nextNode, currentAsset.AssetId));
-                        }
-                    }
-                    else if (nextNode == null && !feederAssets.Contains(connectedAsset))
-                    {
-                        connectedAsset.FeederName = feederName;
-                        connectedAsset.ParentName = currentAsset.AssetId;
-                        feederAssets.Add(connectedAsset);
-                    }
-                }
-            }
-
-            return feederAssets;
-        }
-
-        // Method to trace multiple feeders and return a consolidated list of traced assets
-        public List<List<Asset>> TraceMultipleFeeders(List<(string startingDeviceName, string startingNodeName, string feederName)> startPoints)
-        {
-            var tracedAssets = new List<List<Asset>>();
-
-            foreach (var startPoint in startPoints)
-            {
-                var feederAssets = TraceFeederDFS(startPoint.startingDeviceName, startPoint.startingNodeName, startPoint.feederName);
-                tracedAssets.Add(feederAssets);
-            }
-
-            return tracedAssets;
-        }
-
-    }
 }
