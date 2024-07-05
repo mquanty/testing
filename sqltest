@@ -51,3 +51,51 @@ WS_GEO_Marker M with (nolock)
 ON
 M.Id = Child.MarkerId AND M.ObjectType IN ('Meter', 'Solar', 'EV', 'Battery')
 WHERE X.OptionID = 407
+
+
+
+
+
+
+
+                // Clear existing data
+                _context.WS_GEO_DataPoints.RemoveRange(_context.WS_GEO_DataPoints);
+                _context.SaveChanges();
+
+                // Insert new data points
+                var dataPoints = _context.WS_GEO_DataPoint_Currents
+                    .Where(dpc => dpc.TraceID == caseId)
+                    .Select(dpc => new WS_GEO_DataPoint
+                    {
+                        MarkerId = dpc.MarkerId,
+                        Latitude = dpc.Latitude,
+                        Longitude = dpc.Longitude,
+                        ParentId = 0,
+                        Level = dpc.Level,
+                        Name = dpc.Name,
+                        FullName = dpc.FullName,
+                        NavigationLink = dpc.NavigationLink,
+                        PhaseId = dpc.PhaseId,
+                        StatusId = dpc.StatusId == 0 ? defaultStatusId : dpc.StatusId,
+                        LineMarkerId = dpc.LineMarkerId,
+                        FileSourceId = fileSourceId
+                    })
+                    .OrderBy(dp => dp.Id)
+                    .ToList();
+
+                _context.WS_GEO_DataPoints.AddRange(dataPoints);
+                _context.SaveChanges();
+
+                // Update ParentId
+                var updatedDataPoints = (from dp in _context.WS_GEO_DataPoints
+                                         join dpc in _context.WS_GEO_DataPoint_Currents
+                                         on dp.FullName equals dpc.Parent into temp
+                                         from t in temp.DefaultIfEmpty()
+                                         where dp.FileSourceId == fileSourceId
+                                         select new { dp, t }).ToList();
+
+                foreach (var item in updatedDataPoints)
+                {
+                    item.dp.ParentId = item.t == null ? 0 : item.t.Id;
+                }
+                _context.SaveChanges();
