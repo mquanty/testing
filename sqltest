@@ -99,3 +99,20 @@ WHERE X.OptionID = 407
                     item.dp.ParentId = item.t == null ? 0 : item.t.Id;
                 }
                 _context.SaveChanges();
+
+
+
+
+var updatedDataPoints = _context.WS_GEO_DataPoints
+    .Where(dp => dp.FileSourceId == fileSourceId)
+    .ToList();
+
+updatedDataPoints.ForEach(dp =>
+{
+    var t = _context.WS_GEO_DataPoint_Currents
+                .FirstOrDefault(dpc => dp.FullName.Equals(dpc.Parent, StringComparison.OrdinalIgnoreCase));
+    
+    dp.ParentId = t == null ? 0 : t.Id;
+});
+
+_context.WS_GEO_DataPoints.UpdateRange(updatedDataPoints);
